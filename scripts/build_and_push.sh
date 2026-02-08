@@ -3,11 +3,7 @@
 # Build the agent Docker image (ARM64) and push it to ECR.
 #
 # Usage:
-#   ./scripts/build_and_push.sh [agent_dir]
-#
-# Examples:
-#   ./scripts/build_and_push.sh agents/simple
-#   ./scripts/build_and_push.sh agents/tool_use
+#   ./scripts/build_and_push.sh
 #
 # Prerequisites:
 #   - Docker (with buildx) or Finch
@@ -17,8 +13,9 @@
 
 set -euo pipefail
 
-AGENT_DIR="${1:?Usage: $0 <agent_dir>  (e.g. agents/simple)}"
-INFRA_DIR="$(cd "$(dirname "$0")/../infra" && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+AGENT_DIR="${ROOT_DIR}/agents"
+INFRA_DIR="${ROOT_DIR}/infra"
 
 # Read ECR repository URL from Terraform output
 echo "Reading ECR repository URL from Terraform..."
@@ -43,7 +40,7 @@ aws ecr get-login-password --region "${AWS_REGION}" \
 echo "Building ARM64 image..."
 docker buildx build \
   --platform linux/arm64 \
-  -f "$(cd "$(dirname "$0")/.." && pwd)/Dockerfile" \
+  -f "${AGENT_DIR}/Dockerfile" \
   -t "${IMAGE_URI}" \
   --push \
   "${AGENT_DIR}"

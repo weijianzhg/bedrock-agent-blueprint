@@ -51,14 +51,10 @@ The handler that connects Strands to AgentCore is intentionally boring — if it
 ```
 bedrock-agent-blueprint/
 ├── agents/
-│   ├── simple/                    # Minimal "hello world" agent
-│   │   ├── main.py               # BedrockAgentCoreApp + basic Agent
-│   │   └── requirements.txt
-│   │
-│   └── tool_use/                  # Agent with custom tools
-│       ├── main.py                # BedrockAgentCoreApp + Agent with tools
-│       ├── tools.py               # @tool-decorated functions
-│       └── requirements.txt
+│   ├── Dockerfile                 # ARM64 container for AgentCore
+│   ├── main.py                    # BedrockAgentCoreApp + Agent with tools
+│   ├── tools.py                   # @tool-decorated functions
+│   └── requirements.txt
 │
 ├── infra/
 │   ├── main.tf                    # Provider config + AgentCore Runtime
@@ -68,7 +64,6 @@ bedrock-agent-blueprint/
 │   ├── outputs.tf                 # Runtime ARN, ECR URI
 │   └── terraform.tfvars.example   # Example variable values
 │
-├── Dockerfile                     # ARM64 container for AgentCore
 ├── scripts/
 │   ├── build_and_push.sh          # Build + push Docker image to ECR
 │   └── invoke.py                  # Test the deployed agent
@@ -119,11 +114,7 @@ This creates:
 ### 3. Build and push the agent
 
 ```bash
-# Deploy the simple agent
-./scripts/build_and_push.sh agents/simple
-
-# Or deploy the tool-use agent
-./scripts/build_and_push.sh agents/tool_use
+./scripts/build_and_push.sh
 ```
 
 ### 4. Update the runtime (if image changed)
@@ -152,7 +143,7 @@ You can test the agent locally without deploying to AWS.
 ### Run the agent locally
 
 ```bash
-cd agents/simple
+cd agents
 pip install -r requirements.txt
 python main.py
 
@@ -171,21 +162,15 @@ pytest tests/ -v
 
 The tests exercise tool functions directly — no AWS credentials needed.
 
-## Example Agents
+## The Agent
 
-### Simple Agent (`agents/simple/`)
-
-The absolute minimum: a Strands `Agent` with a system prompt, wired to AgentCore via `BedrockAgentCoreApp`. No tools, no memory — just a conversational agent. Start here to understand the wiring.
-
-### Tool-Use Agent (`agents/tool_use/`)
-
-A practical agent with three custom tools:
+The included agent (`agents/`) demonstrates custom tool integration using the Strands `@tool` decorator. It comes with three example tools:
 
 - **`get_weather`** — Returns weather data for a city (mock, replace with a real API)
 - **`calculate`** — Safely evaluates math expressions
 - **`lookup_item`** — Searches a database by item ID (mock, replace with DynamoDB/RDS)
 
-This demonstrates how Strands handles tool calling: the agent decides when to call a tool, the tool runs, and the agent incorporates the result into its response.
+This demonstrates how Strands handles tool calling: the agent decides when to call a tool, the tool runs, and the agent incorporates the result into its response. The handler that wires Strands to AgentCore is intentionally minimal — all intelligence lives in the agent and its tools.
 
 ## Customization
 
@@ -262,7 +247,7 @@ authorizer_configuration {
 
 ## Observability
 
-The Dockerfile includes `opentelemetry-instrument` which automatically sends traces and metrics to CloudWatch — no code changes needed.
+The agent's Dockerfile includes `opentelemetry-instrument` which automatically sends traces and metrics to CloudWatch — no code changes needed.
 
 To view your agent's observability data:
 

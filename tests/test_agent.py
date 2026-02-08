@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-# Add agent directories to the path so we can import tools
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agents" / "tool_use"))
+# Add agent directory to the path so we can import tools
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agents"))
 
 from tools import calculate, get_weather, lookup_item  # noqa: E402
 
