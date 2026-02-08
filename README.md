@@ -50,31 +50,43 @@ The handler that connects Strands to AgentCore is intentionally boring — if it
 
 ```
 bedrock-agent-blueprint/
-├── agents/
-│   ├── Dockerfile                 # ARM64 container for AgentCore
-│   ├── pyproject.toml             # Dependencies managed by uv
-│   ├── uv.lock                    # Locked dependency versions
-│   ├── main.py                    # BedrockAgentCoreApp + Agent with tools
-│   └── tools.py                   # @tool-decorated functions
+├── agents/                        # Agent code (what you edit)
+│   ├── Dockerfile
+│   ├── pyproject.toml
+│   ├── uv.lock
+│   ├── main.py
+│   └── tools.py
 │
 ├── infra/
-│   ├── main.tf                    # Provider config + AgentCore Runtime
-│   ├── variables.tf               # Configurable inputs
-│   ├── iam.tf                     # IAM roles and policies
-│   ├── ecr.tf                     # ECR repository + lifecycle policy
-│   ├── outputs.tf                 # Runtime ARN, ECR URI
-│   └── terraform.tfvars.example   # Example variable values
+│   ├── platform/                  # One-time setup (ECR, IAM)
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── iam.tf
+│   │   ├── ecr.tf
+│   │   ├── outputs.tf
+│   │   └── terraform.tfvars.example
+│   │
+│   └── agent/                     # Per-deploy (AgentCore Runtime)
+│       ├── main.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       └── terraform.tfvars.example
 │
 ├── scripts/
-│   ├── build_and_push.sh          # Build + push Docker image to ECR
-│   └── invoke.py                  # Test the deployed agent
+│   ├── build_and_push.sh
+│   └── invoke.py
 │
 ├── tests/
-│   └── test_agent.py              # Local tests (no AWS needed)
+│   └── test_agent.py
 │
 ├── .gitignore
 └── README.md
 ```
+
+The Terraform is split into two independent roots:
+
+- **`infra/platform/`** -- ECR repository, IAM role, and policies. Set up once by a platform team (or yourself the first time). Can live in a separate repo.
+- **`infra/agent/`** -- Just the AgentCore runtime resource. This is what you re-deploy when your agent changes.
 
 ## Prerequisites
 
@@ -86,47 +98,49 @@ bedrock-agent-blueprint/
 
 ## Quick Start
 
-### 1. Clone and configure
+### 1. Clone and set up platform (one-time)
 
 ```bash
 git clone <this-repo>
 cd bedrock-agent-blueprint
 
-# Set up Terraform variables
-cp infra/terraform.tfvars.example infra/terraform.tfvars
-# Edit infra/terraform.tfvars with your preferred region, agent name, etc.
-```
+# Configure and deploy platform resources (ECR, IAM)
+cp infra/platform/terraform.tfvars.example infra/platform/terraform.tfvars
+# Edit terraform.tfvars with your region, project name, etc.
 
-### 2. Deploy infrastructure
-
-```bash
-cd infra
+cd infra/platform
 terraform init
-terraform plan
 terraform apply
-cd ..
+cd ../..
 ```
 
-This creates:
-- An ECR repository for your agent container
-- An IAM role with permissions for ECR, Bedrock, and CloudWatch
-- A Bedrock AgentCore Runtime pointing to the ECR image
+This creates the ECR repository and IAM role with permissions for ECR, Bedrock, and CloudWatch.
 
-### 3. Build and push the agent
+### 2. Build and push the agent image
 
 ```bash
 ./scripts/build_and_push.sh
 ```
 
-### 4. Update the runtime (if image changed)
+The script reads the ECR URL from the platform Terraform output automatically.
+
+### 3. Deploy the agent runtime
 
 ```bash
-cd infra
+# Copy the example and fill in platform outputs
+cp infra/agent/terraform.tfvars.example infra/agent/terraform.tfvars
+
+# The two required values come from the platform:
+terraform -chdir=infra/platform output
+
+# Then deploy
+cd infra/agent
+terraform init
 terraform apply
-cd ..
+cd ../..
 ```
 
-### 5. Invoke the agent
+### 4. Invoke the agent
 
 ```bash
 python scripts/invoke.py --prompt "What is the capital of France?"
@@ -136,6 +150,8 @@ python scripts/invoke.py \
   --arn "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my-agent" \
   --prompt "What's the weather in Seattle?"
 ```
+
+After making code changes, the typical workflow is just steps 2-3: rebuild the image, then `terraform apply` in `infra/agent/`.
 
 ## Local Development
 
@@ -223,17 +239,17 @@ agent = Agent(
 
 ### Switch to VPC networking
 
-In `infra/terraform.tfvars`:
+In `infra/agent/terraform.tfvars`:
 
 ```hcl
 network_mode = "VPC"
 ```
 
-You will also need to add `subnets` and `security_groups` to the network configuration in `infra/main.tf`.
+You will also need to add `subnets` and `security_groups` to the network configuration in `infra/agent/main.tf`.
 
 ### Add JWT authorization
 
-Add an `authorizer_configuration` block to the runtime resource in `infra/main.tf`:
+Add an `authorizer_configuration` block to the runtime resource in `infra/agent/main.tf`:
 
 ```hcl
 authorizer_configuration {

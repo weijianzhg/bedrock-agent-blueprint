@@ -1,0 +1,15 @@
+# Copy this file to terraform.tfvars and edit to match your environment.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# The ecr_repository_url and role_arn values come from infra/platform outputs:
+#
+#   cd ../platform && terraform output
+
+aws_region          = "us-east-1"
+agent_name          = "bedrock-agent-blueprint"
+ecr_repository_url  = ""   # paste from: terraform -chdir=../platform output -raw ecr_repository_url
+role_arn            = ""   # paste from: terraform -chdir=../platform output -raw role_arn
+container_tag       = "latest"
+network_mode        = "PUBLIC"
+log_level           = "INFO"

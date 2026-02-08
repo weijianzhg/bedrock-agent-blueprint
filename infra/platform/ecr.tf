@@ -1,9 +1,9 @@
 # --------------------------------------------------------------------------
-# ECR Repository for the agent container image
+# ECR Repository for agent container images
 # --------------------------------------------------------------------------
 
 resource "aws_ecr_repository" "agent" {
-  name                 = "${var.agent_name}-${var.environment}"
+  name                 = "${var.project_name}-${var.environment}"
   image_tag_mutability = "MUTABLE"
   force_delete         = var.environment != "prod"
 

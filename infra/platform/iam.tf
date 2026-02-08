@@ -15,12 +15,12 @@ data "aws_iam_policy_document" "agentcore_assume_role" {
 }
 
 resource "aws_iam_role" "agentcore_runtime" {
-  name               = "${var.agent_name}-${var.environment}-runtime"
+  name               = "${var.project_name}-${var.environment}-runtime"
   assume_role_policy = data.aws_iam_policy_document.agentcore_assume_role.json
 }
 
 # --------------------------------------------------------------------------
-# ECR Pull — allow the runtime to pull the container image
+# ECR Pull — allow the runtime to pull container images
 # --------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "ecr_pull" {
