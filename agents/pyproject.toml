@@ -1,0 +1,11 @@
+[project]
+name = "bedrock-agent-blueprint"
+version = "0.1.0"
+description = "Strands agent deployed to Amazon Bedrock AgentCore Runtime"
+requires-python = ">=3.10"
+dependencies = [
+    "strands-agents",
+    "bedrock-agentcore",
+    "aws-opentelemetry-distro>=0.10.1",
+    "boto3",
+]

@@ -52,9 +52,10 @@ The handler that connects Strands to AgentCore is intentionally boring — if it
 bedrock-agent-blueprint/
 ├── agents/
 │   ├── Dockerfile                 # ARM64 container for AgentCore
+│   ├── pyproject.toml             # Dependencies managed by uv
+│   ├── uv.lock                    # Locked dependency versions
 │   ├── main.py                    # BedrockAgentCoreApp + Agent with tools
-│   ├── tools.py                   # @tool-decorated functions
-│   └── requirements.txt
+│   └── tools.py                   # @tool-decorated functions
 │
 ├── infra/
 │   ├── main.tf                    # Provider config + AgentCore Runtime
@@ -78,7 +79,7 @@ bedrock-agent-blueprint/
 ## Prerequisites
 
 - **AWS Account** with [AgentCore permissions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html)
-- **Python 3.10+**
+- **Python 3.10+** and [**uv**](https://docs.astral.sh/uv/)
 - **Terraform >= 1.5**
 - **Docker** (with buildx support) for building ARM64 images
 - **AWS CLI** configured with credentials
@@ -144,8 +145,8 @@ You can test the agent locally without deploying to AWS.
 
 ```bash
 cd agents
-pip install -r requirements.txt
-python main.py
+uv sync
+uv run python main.py
 
 # In another terminal:
 curl -X POST http://localhost:8080/invocations \
@@ -156,8 +157,7 @@ curl -X POST http://localhost:8080/invocations \
 ### Run the tests
 
 ```bash
-pip install pytest
-pytest tests/ -v
+uv run --directory agents pytest ../tests/ -v
 ```
 
 The tests exercise tool functions directly — no AWS credentials needed.

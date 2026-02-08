@@ -7,9 +7,9 @@ FROM --platform=linux/arm64 ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 WORKDIR /app
 
-# Install dependencies first (layer caching)
-COPY requirements.txt .
-RUN uv pip install --system -r requirements.txt
+# Install dependencies first (layer caching via uv.lock)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy agent source code
 COPY . .
@@ -19,4 +19,4 @@ EXPOSE 8080
 
 # opentelemetry-instrument enables automatic CloudWatch observability
 # without any code changes in the agent itself.
-CMD ["opentelemetry-instrument", "python", "main.py"]
+CMD ["uv", "run", "opentelemetry-instrument", "python", "main.py"]
