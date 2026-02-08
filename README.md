@@ -173,7 +173,9 @@ curl -X POST http://localhost:8080/invocations \
 ### Run the tests
 
 ```bash
-uv run --directory agents pytest ../tests/ -v
+cd agents
+uv sync --dev
+uv run pytest ../tests/ -v
 ```
 
 The tests exercise tool functions directly — no AWS credentials needed.
