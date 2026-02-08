@@ -1,0 +1,9 @@
+# Copy this file to terraform.tfvars and edit to match your environment.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+
+aws_region    = "us-east-1"
+agent_name    = "bedrock-agent-blueprint"
+environment   = "dev"
+network_mode  = "PUBLIC"
+container_tag = "latest"
