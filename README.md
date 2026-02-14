@@ -143,7 +143,7 @@ python scripts/invoke.py --prompt "What is the capital of France?"
 
 # Or specify the ARN directly
 python scripts/invoke.py \
-  --arn "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my-agent" \
+  --arn "arn:aws:bedrock-agentcore:eu-west-1:123456789012:runtime/my-agent" \
   --prompt "What's the weather in Seattle?"
 ```
 
