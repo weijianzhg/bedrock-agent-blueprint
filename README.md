@@ -36,16 +36,6 @@ flowchart TB
     RT --> CW
 ```
 
-**The three-layer mental model:**
-
-| Layer | Responsibility | Analogy |
-|-------|---------------|---------|
-| **Strands SDK** | Agent reasoning, tool calling, memory | Philosophy of mind |
-| **AgentCore Runtime** | Serverless execution, scaling, session isolation | Nervous system |
-| **Terraform** | IAM, networking, runtime configuration | Constitution |
-
-The handler that connects Strands to AgentCore is intentionally boring — if it grows beyond a thin adapter, you're doing it wrong.
-
 ## Project Structure
 
 ```
@@ -83,10 +73,7 @@ bedrock-agent-blueprint/
 └── README.md
 ```
 
-The Terraform is split into two independent roots:
-
-- **`infra/platform/`** -- ECR repository, IAM role, and policies. Set up once by a platform team (or yourself the first time). Can live in a separate repo.
-- **`infra/agent/`** -- Just the AgentCore runtime resource. This is what you re-deploy when your agent changes.
+`infra/platform/` is one-time setup (ECR, IAM); `infra/agent/` is re-deployed when the agent changes.
 
 ## Prerequisites
 
@@ -95,6 +82,17 @@ The Terraform is split into two independent roots:
 - **Terraform >= 1.5**
 - **Docker** (with buildx support) for building ARM64 images
 - **AWS CLI** configured with credentials
+
+### Using an AWS profile
+
+Terraform uses the default AWS credential chain. To use a named profile from `~/.aws/credentials`:
+
+```bash
+export AWS_PROFILE=my-profile
+terraform -chdir=infra/platform plan   # or infra/agent
+```
+
+You can also set `aws_profile = "my-profile"` in `terraform.tfvars` if your Terraform modules define an optional `aws_profile` variable.
 
 ## Quick Start
 
@@ -113,8 +111,6 @@ terraform init
 terraform apply
 cd ../..
 ```
-
-This creates the ECR repository and IAM role with permissions for ECR, Bedrock, and CloudWatch.
 
 ### 2. Build and push the agent image
 
@@ -147,7 +143,7 @@ python scripts/invoke.py --prompt "What is the capital of France?"
 
 # Or specify the ARN directly
 python scripts/invoke.py \
-  --arn "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my-agent" \
+  --arn "arn:aws:bedrock-agentcore:eu-west-1:123456789012:runtime/my-agent" \
   --prompt "What's the weather in Seattle?"
 ```
 
@@ -188,8 +184,6 @@ The included agent (`agents/`) demonstrates custom tool integration using the St
 - **`calculate`** — Safely evaluates math expressions
 - **`lookup_item`** — Searches a database by item ID (mock, replace with DynamoDB/RDS)
 
-This demonstrates how Strands handles tool calling: the agent decides when to call a tool, the tool runs, and the agent incorporates the result into its response. The handler that wires Strands to AgentCore is intentionally minimal — all intelligence lives in the agent and its tools.
-
 ## Customization
 
 ### Add your own tools
@@ -206,11 +200,7 @@ def my_tool(param: str) -> dict:
     Args:
         param: Description of the parameter.
     """
-    result = do_something(param)
-    return {
-        "status": "success",
-        "content": [{"text": str(result)}],
-    }
+    return {"status": "success", "content": [{"text": do_something(param)}]}
 ```
 
 2. Import and add it to the agent's `tools` list in `main.py`:

@@ -33,7 +33,7 @@ def get_runtime_arn_from_terraform() -> str:
         sys.exit(1)
 
 
-def invoke_agent(runtime_arn: str, prompt: str, region: str = "us-east-1") -> dict:
+def invoke_agent(runtime_arn: str, prompt: str, region: str = "eu-west-1") -> dict:
     """Send a prompt to the deployed agent and return the parsed response."""
     client = boto3.client("bedrock-agentcore", region_name=region)
 
@@ -61,7 +61,7 @@ def main():
     parser = argparse.ArgumentParser(description="Invoke a Bedrock AgentCore agent")
     parser.add_argument("--arn", help="Agent runtime ARN (reads from Terraform if omitted)")
     parser.add_argument("--prompt", default="Hello! What can you do?", help="Prompt to send")
-    parser.add_argument("--region", default="us-east-1", help="AWS region")
+    parser.add_argument("--region", default="eu-west-1", help="AWS region")
     args = parser.parse_args()
 
     arn = args.arn or get_runtime_arn_from_terraform()
