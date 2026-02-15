@@ -118,21 +118,21 @@ cd ../..
 ./scripts/build_and_push.sh
 ```
 
-The script reads the ECR URL from the platform Terraform output automatically.
+The script tags the image with the current git short SHA (e.g. `a1b2c3d`) and also pushes `latest`. It prints the exact `terraform apply` command at the end.
 
 ### 3. Deploy the agent runtime
 
 ```bash
-# Copy the example and fill in platform outputs
+# Copy the example and fill in platform outputs (first time only)
 cp infra/agent/terraform.tfvars.example infra/agent/terraform.tfvars
 
 # The two required values come from the platform:
 terraform -chdir=infra/platform output
 
-# Then deploy
+# Then deploy (use the tag printed by the build script)
 cd infra/agent
 terraform init
-terraform apply
+terraform apply -var="container_tag=<git-sha>"
 cd ../..
 ```
 
@@ -147,7 +147,7 @@ python scripts/invoke.py \
   --prompt "What's the weather in Seattle?"
 ```
 
-After making code changes, the typical workflow is just steps 2-3: rebuild the image, then `terraform apply` in `infra/agent/`.
+After making code changes, the typical workflow is just steps 2-3: rebuild the image, then `terraform apply -var="container_tag=<new-sha>"` in `infra/agent/`.
 
 ## Local Development
 
