@@ -123,6 +123,7 @@ python scripts/invoke.py --prompt "What is sqrt(144) + 3 * 2?"
 python scripts/invoke.py --prompt "Look up item ITEM-001 in inventory"
 ```
 
+
 You can also pass the runtime ARN directly:
 
 ```bash
