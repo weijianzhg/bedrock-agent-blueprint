@@ -79,7 +79,7 @@ bedrock-agent-blueprint/
 
 ## Quick Start
 
-### 1. Deploy infrastructure
+### 1. Configure
 
 ```bash
 git clone <this-repo>
@@ -87,12 +87,7 @@ cd bedrock-agent-blueprint
 
 cp infra/terraform.tfvars.example infra/terraform.tfvars
 # Edit infra/terraform.tfvars with your AWS region, project name, etc.
-
-terraform -chdir=infra init
-terraform -chdir=infra apply
 ```
-
-This creates all AWS resources in one step: an ECR repository, IAM roles and policies, and the AgentCore runtime.
 
 ### 2. Build and push the agent image
 
@@ -100,15 +95,16 @@ This creates all AWS resources in one step: an ECR repository, IAM roles and pol
 ./scripts/build_and_push.sh
 ```
 
-The script builds an ARM64 Docker image, tags it with the current git short SHA (e.g. `a1b2c3d`) and `latest`, and pushes both to ECR.
+The script creates the ECR repository if it doesn't exist yet, builds an ARM64 Docker image, tags it with the current git short SHA (e.g. `a1b2c3d`) and `latest`, and pushes both to ECR.
 
-### 3. Deploy the updated image
+### 3. Deploy infrastructure and agent runtime
 
 ```bash
+terraform -chdir=infra init
 terraform -chdir=infra apply -var="container_tag=<git-sha>"
 ```
 
-Use the tag printed at the end of the build script.
+Use the tag printed at the end of the build script. Terraform imports the ECR repository the build script created, provisions IAM roles, and creates the AgentCore runtime pointing at your image.
 
 ### 4. Invoke the agent
 
@@ -134,7 +130,7 @@ python scripts/invoke.py \
 
 ### Day-to-day workflow
 
-After the initial setup, the typical development loop is just two commands:
+After the initial setup, the development loop is always the same two commands:
 
 ```bash
 ./scripts/build_and_push.sh

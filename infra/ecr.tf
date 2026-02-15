@@ -1,6 +1,16 @@
 # --------------------------------------------------------------------------
 # ECR Repository for agent container images
+#
+# The build_and_push.sh script creates this repository via AWS CLI on its
+# first run (before Terraform has been applied).  The import block below
+# adopts the existing repository into Terraform state so it can be managed
+# and torn down with `terraform destroy`.
 # --------------------------------------------------------------------------
+
+import {
+  to = aws_ecr_repository.agent
+  id = "${var.project_name}-${var.environment}"
+}
 
 resource "aws_ecr_repository" "agent" {
   name                 = "${var.project_name}-${var.environment}"
