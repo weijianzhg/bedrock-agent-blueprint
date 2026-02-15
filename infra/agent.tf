@@ -1,26 +1,3 @@
-terraform {
-  required_version = ">= 1.5.0"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.70.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = var.aws_region
-
-  default_tags {
-    tags = {
-      Project   = var.agent_name
-      ManagedBy = "terraform"
-      Layer     = "agent"
-    }
-  }
-}
-
 # --------------------------------------------------------------------------
 # AgentCore Runtime
 # --------------------------------------------------------------------------
@@ -28,11 +5,11 @@ provider "aws" {
 resource "aws_bedrockagentcore_agent_runtime" "this" {
   agent_runtime_name = var.agent_name
   description        = var.agent_description
-  role_arn           = var.role_arn
+  role_arn           = aws_iam_role.agentcore_runtime.arn
 
   agent_runtime_artifact {
     container_configuration {
-      container_uri = "${var.ecr_repository_url}:${var.container_tag}"
+      container_uri = "${aws_ecr_repository.agent.repository_url}:${var.container_tag}"
     }
   }
 

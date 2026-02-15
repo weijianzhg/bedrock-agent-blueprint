@@ -47,20 +47,14 @@ bedrock-agent-blueprint/
 │   ├── main.py
 │   └── tools.py
 │
-├── infra/
-│   ├── platform/                  # One-time setup (ECR, IAM)
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   ├── iam.tf
-│   │   ├── ecr.tf
-│   │   ├── outputs.tf
-│   │   └── terraform.tfvars.example
-│   │
-│   └── agent/                     # Per-deploy (AgentCore Runtime)
-│       ├── main.tf
-│       ├── variables.tf
-│       ├── outputs.tf
-│       └── terraform.tfvars.example
+├── infra/                         # Terraform (ECR, IAM, AgentCore Runtime)
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── iam.tf
+│   ├── ecr.tf
+│   ├── agent.tf
+│   ├── outputs.tf
+│   └── terraform.tfvars.example
 │
 ├── scripts/
 │   ├── build_and_push.sh
@@ -72,8 +66,6 @@ bedrock-agent-blueprint/
 ├── .gitignore
 └── README.md
 ```
-
-`infra/platform/` is one-time setup (ECR, IAM); `infra/agent/` is re-deployed when the agent changes.
 
 ## Prerequisites
 
@@ -89,28 +81,28 @@ Terraform uses the default AWS credential chain. To use a named profile from `~/
 
 ```bash
 export AWS_PROFILE=my-profile
-terraform -chdir=infra/platform plan   # or infra/agent
+terraform -chdir=infra plan
 ```
-
-You can also set `aws_profile = "my-profile"` in `terraform.tfvars` if your Terraform modules define an optional `aws_profile` variable.
 
 ## Quick Start
 
-### 1. Clone and set up platform (one-time)
+### 1. Clone and deploy infrastructure
 
 ```bash
 git clone <this-repo>
 cd bedrock-agent-blueprint
 
-# Configure and deploy platform resources (ECR, IAM)
-cp infra/platform/terraform.tfvars.example infra/platform/terraform.tfvars
+# Configure infrastructure
+cp infra/terraform.tfvars.example infra/terraform.tfvars
 # Edit terraform.tfvars with your region, project name, etc.
 
-cd infra/platform
+cd infra
 terraform init
 terraform apply
-cd ../..
+cd ..
 ```
+
+This creates the ECR repository, IAM roles, and the AgentCore runtime in one step.
 
 ### 2. Build and push the agent image
 
@@ -120,20 +112,11 @@ cd ../..
 
 The script tags the image with the current git short SHA (e.g. `a1b2c3d`) and also pushes `latest`. It prints the exact `terraform apply` command at the end.
 
-### 3. Deploy the agent runtime
+### 3. Deploy the updated image
 
 ```bash
-# Copy the example and fill in platform outputs (first time only)
-cp infra/agent/terraform.tfvars.example infra/agent/terraform.tfvars
-
-# The two required values come from the platform:
-terraform -chdir=infra/platform output
-
-# Then deploy (use the tag printed by the build script)
-cd infra/agent
-terraform init
-terraform apply -var="container_tag=<git-sha>"
-cd ../..
+# Use the tag printed by the build script
+terraform -chdir=infra apply -var="container_tag=<git-sha>"
 ```
 
 ### 4. Invoke the agent
@@ -147,7 +130,7 @@ python scripts/invoke.py \
   --prompt "What's the weather in Seattle?"
 ```
 
-After making code changes, the typical workflow is just steps 2-3: rebuild the image, then `terraform apply -var="container_tag=<new-sha>"` in `infra/agent/`.
+After making code changes, the typical workflow is just steps 2-3: rebuild the image, then `terraform -chdir=infra apply -var="container_tag=<new-sha>"`.
 
 ## Local Development
 
@@ -231,17 +214,17 @@ agent = Agent(
 
 ### Switch to VPC networking
 
-In `infra/agent/terraform.tfvars`:
+In `infra/terraform.tfvars`:
 
 ```hcl
 network_mode = "VPC"
 ```
 
-You will also need to add `subnets` and `security_groups` to the network configuration in `infra/agent/main.tf`.
+You will also need to add `subnets` and `security_groups` to the network configuration in `infra/agent.tf`.
 
 ### Add JWT authorization
 
-Add an `authorizer_configuration` block to the runtime resource in `infra/agent/main.tf`:
+Add an `authorizer_configuration` block to the runtime resource in `infra/agent.tf`:
 
 ```hcl
 authorizer_configuration {
