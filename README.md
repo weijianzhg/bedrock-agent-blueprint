@@ -113,7 +113,14 @@ Use the tag printed at the end of the build script.
 ### 4. Invoke the agent
 
 ```bash
-python scripts/invoke.py --prompt "What is the capital of France?"
+# Uses the built-in get_weather tool
+python scripts/invoke.py --prompt "What's the weather in Seattle?"
+
+# Uses the built-in calculate tool
+python scripts/invoke.py --prompt "What is sqrt(144) + 3 * 2?"
+
+# Uses the built-in lookup_item tool
+python scripts/invoke.py --prompt "Look up item ITEM-001 in inventory"
 ```
 
 You can also pass the runtime ARN directly:

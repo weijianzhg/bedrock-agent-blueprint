@@ -26,9 +26,14 @@ variable "environment" {
 # --------------------------------------------------------------------------
 
 variable "agent_name" {
-  description = "Name for the AgentCore runtime"
+  description = "Name for the AgentCore runtime (alphanumeric and underscores only)"
   type        = string
-  default     = "bedrock-agent-blueprint"
+  default     = "bedrock_agent_blueprint"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z][a-zA-Z0-9_]{0,47}$", var.agent_name))
+    error_message = "agent_name must start with a letter, contain only alphanumeric characters and underscores, and be at most 48 characters."
+  }
 }
 
 variable "agent_description" {

@@ -7,7 +7,7 @@ project_name  = "bedrock-agent-blueprint"
 environment   = "dev"
 
 # Agent settings
-agent_name    = "bedrock-agent-blueprint"
+agent_name    = "bedrock_agent_blueprint"
 container_tag = "latest"
 network_mode  = "PUBLIC"
 log_level     = "INFO"
