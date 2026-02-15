@@ -1,6 +1,6 @@
 # Bedrock AgentCore Blueprint
 
-A production-ready template for building AI agents with [Strands Agents SDK](https://strandsagents.com/) and deploying them to [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html), with all infrastructure managed by [Terraform](https://www.terraform.io/).
+A production-ready template for building AI agents with [Strands Agents SDK](https://strandsagents.com/) and deploying them to [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html). Infrastructure is managed with [Terraform](https://www.terraform.io/).
 
 ## Architecture
 
@@ -57,8 +57,8 @@ bedrock-agent-blueprint/
 │   └── terraform.tfvars.example
 │
 ├── scripts/
-│   ├── build_and_push.sh
-│   └── invoke.py
+│   ├── build_and_push.sh          # Build Docker image and push to ECR
+│   └── invoke.py                  # Call the deployed agent
 │
 ├── tests/
 │   └── test_agent.py
@@ -75,34 +75,24 @@ bedrock-agent-blueprint/
 - **Docker** (with buildx support) for building ARM64 images
 - **AWS CLI** configured with credentials
 
-### Using an AWS profile
-
-Terraform uses the default AWS credential chain. To use a named profile from `~/.aws/credentials`:
-
-```bash
-export AWS_PROFILE=my-profile
-terraform -chdir=infra plan
-```
+> **Tip:** Terraform uses the default AWS credential chain. To use a named profile, run `export AWS_PROFILE=my-profile` before any Terraform or AWS CLI commands.
 
 ## Quick Start
 
-### 1. Clone and deploy infrastructure
+### 1. Deploy infrastructure
 
 ```bash
 git clone <this-repo>
 cd bedrock-agent-blueprint
 
-# Configure infrastructure
 cp infra/terraform.tfvars.example infra/terraform.tfvars
-# Edit terraform.tfvars with your region, project name, etc.
+# Edit infra/terraform.tfvars with your AWS region, project name, etc.
 
-cd infra
-terraform init
-terraform apply
-cd ..
+terraform -chdir=infra init
+terraform -chdir=infra apply
 ```
 
-This creates the ECR repository, IAM roles, and the AgentCore runtime in one step.
+This creates all AWS resources in one step: an ECR repository, IAM roles and policies, and the AgentCore runtime.
 
 ### 2. Build and push the agent image
 
@@ -110,27 +100,38 @@ This creates the ECR repository, IAM roles, and the AgentCore runtime in one ste
 ./scripts/build_and_push.sh
 ```
 
-The script tags the image with the current git short SHA (e.g. `a1b2c3d`) and also pushes `latest`. It prints the exact `terraform apply` command at the end.
+The script builds an ARM64 Docker image, tags it with the current git short SHA (e.g. `a1b2c3d`) and `latest`, and pushes both to ECR.
 
 ### 3. Deploy the updated image
 
 ```bash
-# Use the tag printed by the build script
 terraform -chdir=infra apply -var="container_tag=<git-sha>"
 ```
+
+Use the tag printed at the end of the build script.
 
 ### 4. Invoke the agent
 
 ```bash
 python scripts/invoke.py --prompt "What is the capital of France?"
+```
 
-# Or specify the ARN directly
+You can also pass the runtime ARN directly:
+
+```bash
 python scripts/invoke.py \
   --arn "arn:aws:bedrock-agentcore:eu-west-1:123456789012:runtime/my-agent" \
   --prompt "What's the weather in Seattle?"
 ```
 
-After making code changes, the typical workflow is just steps 2-3: rebuild the image, then `terraform -chdir=infra apply -var="container_tag=<new-sha>"`.
+### Day-to-day workflow
+
+After the initial setup, the typical development loop is just two commands:
+
+```bash
+./scripts/build_and_push.sh
+terraform -chdir=infra apply -var="container_tag=<new-sha>"
+```
 
 ## Local Development
 
@@ -142,8 +143,11 @@ You can test the agent locally without deploying to AWS.
 cd agents
 uv sync
 uv run python main.py
+```
 
-# In another terminal:
+Then, in another terminal:
+
+```bash
 curl -X POST http://localhost:8080/invocations \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Hello!"}'
@@ -157,15 +161,15 @@ uv sync --dev
 uv run pytest ../tests/ -v
 ```
 
-The tests exercise tool functions directly — no AWS credentials needed.
+The tests exercise tool functions directly -- no AWS credentials needed.
 
 ## The Agent
 
 The included agent (`agents/`) demonstrates custom tool integration using the Strands `@tool` decorator. It comes with three example tools:
 
-- **`get_weather`** — Returns weather data for a city (mock, replace with a real API)
-- **`calculate`** — Safely evaluates math expressions
-- **`lookup_item`** — Searches a database by item ID (mock, replace with DynamoDB/RDS)
+- **`get_weather`** -- Returns weather data for a city (mock, replace with a real API)
+- **`calculate`** -- Safely evaluates math expressions
+- **`lookup_item`** -- Searches a database by item ID (mock, replace with DynamoDB/RDS)
 
 ## Customization
 
@@ -238,13 +242,25 @@ authorizer_configuration {
 
 ## Observability
 
-The agent's Dockerfile includes `opentelemetry-instrument` which automatically sends traces and metrics to CloudWatch — no code changes needed.
+The Dockerfile includes `opentelemetry-instrument`, which automatically sends traces and metrics to CloudWatch -- no code changes needed.
 
 To view your agent's observability data:
 
 1. Enable [CloudWatch Transaction Search](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability.html) (one-time setup)
 2. Open the CloudWatch console
 3. Navigate to **GenAI Observability** to see traces, metrics, and logs
+
+## Tear Down
+
+To remove all deployed resources and avoid ongoing charges:
+
+```bash
+terraform -chdir=infra destroy
+```
+
+This deletes the AgentCore runtime, IAM roles, and the ECR repository (including all pushed images for non-prod environments).
+
+> **Note:** In production (`environment = "prod"`), the ECR repository has deletion protection enabled. You will need to manually empty and delete it, or set `force_delete = true` in `infra/ecr.tf` before destroying.
 
 ## When To Use This Setup
 
