@@ -1,6 +1,6 @@
 # Bedrock AgentCore Blueprint
 
-A production-ready template for building AI agents with [Strands Agents SDK](https://strandsagents.com/) and deploying them to [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html), with all infrastructure managed by [Terraform](https://www.terraform.io/).
+A production-ready template for building AI agents with [Strands Agents SDK](https://strandsagents.com/) and deploying them to [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html). Infrastructure is managed with [Terraform](https://www.terraform.io/).
 
 ## Architecture
 
@@ -47,24 +47,18 @@ bedrock-agent-blueprint/
 │   ├── main.py
 │   └── tools.py
 │
-├── infra/
-│   ├── platform/                  # One-time setup (ECR, IAM)
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   ├── iam.tf
-│   │   ├── ecr.tf
-│   │   ├── outputs.tf
-│   │   └── terraform.tfvars.example
-│   │
-│   └── agent/                     # Per-deploy (AgentCore Runtime)
-│       ├── main.tf
-│       ├── variables.tf
-│       ├── outputs.tf
-│       └── terraform.tfvars.example
+├── infra/                         # Terraform (ECR, IAM, AgentCore Runtime)
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── iam.tf
+│   ├── ecr.tf
+│   ├── agent.tf
+│   ├── outputs.tf
+│   └── terraform.tfvars.example
 │
 ├── scripts/
-│   ├── build_and_push.sh
-│   └── invoke.py
+│   ├── build_and_push.sh          # Build Docker image and push to ECR
+│   └── invoke.py                  # Call the deployed agent
 │
 ├── tests/
 │   └── test_agent.py
@@ -72,8 +66,6 @@ bedrock-agent-blueprint/
 ├── .gitignore
 └── README.md
 ```
-
-`infra/platform/` is one-time setup (ECR, IAM); `infra/agent/` is re-deployed when the agent changes.
 
 ## Prerequisites
 
@@ -83,34 +75,24 @@ bedrock-agent-blueprint/
 - **Docker** (with buildx support) for building ARM64 images
 - **AWS CLI** configured with credentials
 
-### Using an AWS profile
-
-Terraform uses the default AWS credential chain. To use a named profile from `~/.aws/credentials`:
-
-```bash
-export AWS_PROFILE=my-profile
-terraform -chdir=infra/platform plan   # or infra/agent
-```
-
-You can also set `aws_profile = "my-profile"` in `terraform.tfvars` if your Terraform modules define an optional `aws_profile` variable.
+> **Tip:** Terraform uses the default AWS credential chain. To use a named profile, run `export AWS_PROFILE=my-profile` before any Terraform or AWS CLI commands.
 
 ## Quick Start
 
-### 1. Clone and set up platform (one-time)
+### 1. Deploy infrastructure
 
 ```bash
 git clone <this-repo>
 cd bedrock-agent-blueprint
 
-# Configure and deploy platform resources (ECR, IAM)
-cp infra/platform/terraform.tfvars.example infra/platform/terraform.tfvars
-# Edit terraform.tfvars with your region, project name, etc.
+cp infra/terraform.tfvars.example infra/terraform.tfvars
+# Edit infra/terraform.tfvars with your AWS region, project name, etc.
 
-cd infra/platform
-terraform init
-terraform apply
-cd ../..
+terraform -chdir=infra init
+terraform -chdir=infra apply
 ```
+
+This creates all AWS resources in one step: an ECR repository, IAM roles and policies, and the AgentCore runtime.
 
 ### 2. Build and push the agent image
 
@@ -118,36 +100,45 @@ cd ../..
 ./scripts/build_and_push.sh
 ```
 
-The script tags the image with the current git short SHA (e.g. `a1b2c3d`) and also pushes `latest`. It prints the exact `terraform apply` command at the end.
+The script builds an ARM64 Docker image, tags it with the current git short SHA (e.g. `a1b2c3d`) and `latest`, and pushes both to ECR.
 
-### 3. Deploy the agent runtime
+### 3. Deploy the updated image
 
 ```bash
-# Copy the example and fill in platform outputs (first time only)
-cp infra/agent/terraform.tfvars.example infra/agent/terraform.tfvars
-
-# The two required values come from the platform:
-terraform -chdir=infra/platform output
-
-# Then deploy (use the tag printed by the build script)
-cd infra/agent
-terraform init
-terraform apply -var="container_tag=<git-sha>"
-cd ../..
+terraform -chdir=infra apply -var="container_tag=<git-sha>"
 ```
+
+Use the tag printed at the end of the build script.
 
 ### 4. Invoke the agent
 
 ```bash
-python scripts/invoke.py --prompt "What is the capital of France?"
+# Uses the built-in get_weather tool
+python scripts/invoke.py --prompt "What's the weather in Seattle?"
 
-# Or specify the ARN directly
+# Uses the built-in calculate tool
+python scripts/invoke.py --prompt "What is sqrt(144) + 3 * 2?"
+
+# Uses the built-in lookup_item tool
+python scripts/invoke.py --prompt "Look up item ITEM-001 in inventory"
+```
+
+You can also pass the runtime ARN directly:
+
+```bash
 python scripts/invoke.py \
   --arn "arn:aws:bedrock-agentcore:eu-west-1:123456789012:runtime/my-agent" \
   --prompt "What's the weather in Seattle?"
 ```
 
-After making code changes, the typical workflow is just steps 2-3: rebuild the image, then `terraform apply -var="container_tag=<new-sha>"` in `infra/agent/`.
+### Day-to-day workflow
+
+After the initial setup, the typical development loop is just two commands:
+
+```bash
+./scripts/build_and_push.sh
+terraform -chdir=infra apply -var="container_tag=<new-sha>"
+```
 
 ## Local Development
 
@@ -159,8 +150,11 @@ You can test the agent locally without deploying to AWS.
 cd agents
 uv sync
 uv run python main.py
+```
 
-# In another terminal:
+Then, in another terminal:
+
+```bash
 curl -X POST http://localhost:8080/invocations \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Hello!"}'
@@ -174,15 +168,15 @@ uv sync --dev
 uv run pytest ../tests/ -v
 ```
 
-The tests exercise tool functions directly — no AWS credentials needed.
+The tests exercise tool functions directly -- no AWS credentials needed.
 
 ## The Agent
 
 The included agent (`agents/`) demonstrates custom tool integration using the Strands `@tool` decorator. It comes with three example tools:
 
-- **`get_weather`** — Returns weather data for a city (mock, replace with a real API)
-- **`calculate`** — Safely evaluates math expressions
-- **`lookup_item`** — Searches a database by item ID (mock, replace with DynamoDB/RDS)
+- **`get_weather`** -- Returns weather data for a city (mock, replace with a real API)
+- **`calculate`** -- Safely evaluates math expressions
+- **`lookup_item`** -- Searches a database by item ID (mock, replace with DynamoDB/RDS)
 
 ## Customization
 
@@ -231,17 +225,17 @@ agent = Agent(
 
 ### Switch to VPC networking
 
-In `infra/agent/terraform.tfvars`:
+In `infra/terraform.tfvars`:
 
 ```hcl
 network_mode = "VPC"
 ```
 
-You will also need to add `subnets` and `security_groups` to the network configuration in `infra/agent/main.tf`.
+You will also need to add `subnets` and `security_groups` to the network configuration in `infra/agent.tf`.
 
 ### Add JWT authorization
 
-Add an `authorizer_configuration` block to the runtime resource in `infra/agent/main.tf`:
+Add an `authorizer_configuration` block to the runtime resource in `infra/agent.tf`:
 
 ```hcl
 authorizer_configuration {
@@ -255,13 +249,25 @@ authorizer_configuration {
 
 ## Observability
 
-The agent's Dockerfile includes `opentelemetry-instrument` which automatically sends traces and metrics to CloudWatch — no code changes needed.
+The Dockerfile includes `opentelemetry-instrument`, which automatically sends traces and metrics to CloudWatch -- no code changes needed.
 
 To view your agent's observability data:
 
 1. Enable [CloudWatch Transaction Search](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability.html) (one-time setup)
 2. Open the CloudWatch console
 3. Navigate to **GenAI Observability** to see traces, metrics, and logs
+
+## Tear Down
+
+To remove all deployed resources and avoid ongoing charges:
+
+```bash
+terraform -chdir=infra destroy
+```
+
+This deletes the AgentCore runtime, IAM roles, and the ECR repository (including all pushed images for non-prod environments).
+
+> **Note:** In production (`environment = "prod"`), the ECR repository has deletion protection enabled. You will need to manually empty and delete it, or set `force_delete = true` in `infra/ecr.tf` before destroying.
 
 ## When To Use This Setup
 

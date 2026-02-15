@@ -21,7 +21,7 @@ def get_runtime_arn_from_terraform() -> str:
     try:
         result = subprocess.run(
             ["terraform", "output", "-raw", "agent_runtime_arn"],
-            cwd="infra/agent",
+            cwd="infra",
             capture_output=True,
             text=True,
             check=True,
@@ -29,7 +29,7 @@ def get_runtime_arn_from_terraform() -> str:
         return result.stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("ERROR: Could not read agent_runtime_arn from Terraform output.")
-        print("       Pass --arn explicitly or run 'terraform apply' in infra/agent/ first.")
+        print("       Pass --arn explicitly or run 'terraform apply' in infra/ first.")
         sys.exit(1)
 
 

@@ -4,10 +4,36 @@ variable "aws_region" {
   default     = "eu-west-1"
 }
 
-variable "agent_name" {
-  description = "Name for the AgentCore runtime"
+variable "project_name" {
+  description = "Project name used to prefix resource names"
   type        = string
   default     = "bedrock-agent-blueprint"
+}
+
+variable "environment" {
+  description = "Deployment environment (dev, staging, prod)"
+  type        = string
+  default     = "dev"
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be one of: dev, staging, prod"
+  }
+}
+
+# --------------------------------------------------------------------------
+# Agent settings
+# --------------------------------------------------------------------------
+
+variable "agent_name" {
+  description = "Name for the AgentCore runtime (alphanumeric and underscores only)"
+  type        = string
+  default     = "bedrock_agent_blueprint"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z][a-zA-Z0-9_]{0,47}$", var.agent_name))
+    error_message = "agent_name must start with a letter, contain only alphanumeric characters and underscores, and be at most 48 characters."
+  }
 }
 
 variable "agent_description" {
@@ -15,24 +41,6 @@ variable "agent_description" {
   type        = string
   default     = "Strands agent deployed via bedrock-agent-blueprint"
 }
-
-# --------------------------------------------------------------------------
-# Values from infra/platform outputs
-# --------------------------------------------------------------------------
-
-variable "ecr_repository_url" {
-  description = "ECR repository URL (from infra/platform output)"
-  type        = string
-}
-
-variable "role_arn" {
-  description = "IAM role ARN for the AgentCore runtime (from infra/platform output)"
-  type        = string
-}
-
-# --------------------------------------------------------------------------
-# Deployment settings
-# --------------------------------------------------------------------------
 
 variable "container_tag" {
   description = "Docker image tag to deploy"
