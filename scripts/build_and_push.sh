@@ -25,7 +25,12 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 # ---- Resolve ECR repository URL ----
 # Fast path: read from Terraform state (works after the first full apply).
-ECR_URL=$(terraform -chdir="$INFRA_DIR" output -raw ecr_repository_url 2>/dev/null || true)
+# Validate with a pattern match because `terraform output` may print warnings
+# to stdout (e.g. after destroy) instead of returning a non-zero exit code.
+ECR_URL=$(terraform -chdir="$INFRA_DIR" output -no-color -raw ecr_repository_url 2>/dev/null || true)
+if [[ ! "$ECR_URL" =~ \.dkr\.ecr\. ]]; then
+  ECR_URL=""
+fi
 
 if [ -z "$ECR_URL" ]; then
   # First run — Terraform hasn't been applied yet.  Derive the repo name
