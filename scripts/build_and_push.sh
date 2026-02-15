@@ -36,8 +36,8 @@ if [ -z "$ECR_URL" ]; then
   # First run — Terraform hasn't been applied yet.  Derive the repo name
   # from terraform.tfvars (or fall back to defaults) and create the repo.
   if [ -f "$TFVARS_FILE" ]; then
-    PROJECT_NAME=$(grep -E '^\s*project_name\s*=' "$TFVARS_FILE" | head -1 | sed 's/.*=\s*"\(.*\)"/\1/')
-    ENVIRONMENT=$(grep -E '^\s*environment\s*=' "$TFVARS_FILE" | head -1 | sed 's/.*=\s*"\(.*\)"/\1/')
+    PROJECT_NAME=$(awk -F'"' '/^[[:space:]]*project_name[[:space:]]*=/{print $2; exit}' "$TFVARS_FILE")
+    ENVIRONMENT=$(awk -F'"' '/^[[:space:]]*environment[[:space:]]*=/{print $2; exit}' "$TFVARS_FILE")
   fi
   PROJECT_NAME="${PROJECT_NAME:-bedrock-agent-blueprint}"
   ENVIRONMENT="${ENVIRONMENT:-dev}"
