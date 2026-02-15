@@ -11,12 +11,16 @@ its tools, not here.
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from strands import Agent
+from strands.models.bedrock import BedrockModel
 
 from tools import calculate, get_weather, lookup_item
 
 app = BedrockAgentCoreApp()
 
+model = BedrockModel(model_id="eu.anthropic.claude-sonnet-4-5-20250929-v1:0")
+
 agent = Agent(
+    model=model,
     system_prompt=(
         "You are a helpful assistant with access to tools. "
         "Use the available tools when they can help answer the user's question. "

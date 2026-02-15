@@ -216,12 +216,12 @@ agent = Agent(
 
 ### Change the model
 
-By default, Strands uses the default Bedrock model. To specify a different one:
+The agent uses Claude Sonnet 4.5 via cross-region inference (`eu.anthropic.claude-sonnet-4-5-20250929-v1:0`) by default. To use a different model or region prefix, update `main.py`:
 
 ```python
 from strands.models.bedrock import BedrockModel
 
-model = BedrockModel(model_id="us.anthropic.claude-sonnet-4-20250514")
+model = BedrockModel(model_id="us.anthropic.claude-sonnet-4-5-20250929-v1:0")
 
 agent = Agent(
     model=model,
