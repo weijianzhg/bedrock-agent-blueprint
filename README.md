@@ -156,6 +156,8 @@ terraform -chdir=infra apply -var="container_tag=<new-sha>"
 
 The blueprint includes optional [AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html) resources and a reusable Python helper in `agents/memory.py`.
 
+For guidance on when to use memory, what to store, and how to verify it, see [docs/memory.md](docs/memory.md).
+
 When `agent_memory_enabled = true`, Terraform creates:
 
 - an AgentCore Memory resource
