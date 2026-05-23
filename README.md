@@ -65,7 +65,7 @@ bedrock-agent-blueprint/
 │   ├── backend.tf.example
 │   └── terraform.tfvars.example
 │
-├── .github/workflows/
+├── examples/github-workflows/      # Example workflows; not active in this repo
 │   ├── ci.yml                     # PR tests and Terraform validation
 │   ├── deploy.yml                 # Build, push, and deploy on main
 │   └── rollback.yml               # Roll back to a previous ECR image tag
@@ -191,7 +191,9 @@ Keep public-template memory generic. Store reusable facts, task summaries, user-
 
 ## CI/CD
 
-The template includes three GitHub Actions workflows:
+The template includes three example GitHub Actions workflows under `examples/github-workflows/`.
+
+They are intentionally not stored in `.github/workflows`, so this public template repository does not run CI/CD by default. To enable them in your own generated project, copy the files into `.github/workflows/`.
 
 - `ci.yml` runs Python tests and Terraform formatting/validation on pull requests.
 - `deploy.yml` runs tests, builds an ARM64 image, pushes it to ECR using the merge SHA and `latest` tags, then applies Terraform with `container_tag=${GITHUB_SHA}`.
