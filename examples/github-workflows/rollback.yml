@@ -1,0 +1,76 @@
+name: Rollback AgentCore Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      container_tag:
+        description: "ECR image tag to roll back to, such as a previous merge SHA or latest"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-1' }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  TF_STATE_KEY: ${{ vars.TF_STATE_KEY || 'bedrock-agent-blueprint/dev/terraform.tfstate' }}
+  TF_VAR_aws_region: ${{ vars.AWS_REGION || 'eu-west-1' }}
+  TF_VAR_github_repository: ${{ github.repository }}
+  TF_VAR_github_deploy_branch: main
+  TF_VAR_terraform_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+  TF_VAR_terraform_state_key: ${{ vars.TF_STATE_KEY || 'bedrock-agent-blueprint/dev/terraform.tfstate' }}
+
+jobs:
+  rollback:
+    name: Roll back AgentCore Runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+
+      - name: Initialize Terraform
+        run: |
+          if [ -f infra/backend.tf ]; then
+            terraform -chdir=infra init \
+              -backend-config="bucket=${TF_STATE_BUCKET}" \
+              -backend-config="key=${TF_STATE_KEY}" \
+              -backend-config="region=${AWS_REGION}" \
+              -backend-config="encrypt=true" \
+              -backend-config="use_lockfile=true"
+          else
+            terraform -chdir=infra init
+          fi
+
+      - name: Verify image exists in ECR
+        env:
+          CONTAINER_TAG: ${{ inputs.container_tag }}
+        run: |
+          set -euo pipefail
+          repo_url=$(terraform -chdir=infra output -raw ecr_repository_url)
+          repo_name="${repo_url##*/}"
+          echo "Looking for tag '${CONTAINER_TAG}' in repository '${repo_name}'"
+          aws ecr describe-images \
+            --repository-name "${repo_name}" \
+            --image-ids imageTag="${CONTAINER_TAG}" \
+            --region "${AWS_REGION}" >/dev/null
+          echo "Image found. Proceeding with rollback."
+
+      - name: Roll back AgentCore Runtime to target tag
+        env:
+          CONTAINER_TAG: ${{ inputs.container_tag }}
+        run: terraform -chdir=infra apply -auto-approve -var="container_tag=${CONTAINER_TAG}"

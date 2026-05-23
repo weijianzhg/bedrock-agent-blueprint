@@ -71,6 +71,33 @@ resource "aws_iam_role_policy" "bedrock_invoke" {
 }
 
 # --------------------------------------------------------------------------
+# AgentCore Memory — allow the agent to store and retrieve long-term memory
+# --------------------------------------------------------------------------
+
+data "aws_iam_policy_document" "agentcore_memory" {
+  count = var.agent_memory_enabled ? 1 : 0
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "bedrock-agentcore:BatchCreateMemoryRecords",
+      "bedrock-agentcore:CreateEvent",
+      "bedrock-agentcore:ListMemoryRecords",
+      "bedrock-agentcore:RetrieveMemoryRecords",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "agentcore_memory" {
+  count = var.agent_memory_enabled ? 1 : 0
+
+  name   = "agentcore-memory"
+  role   = aws_iam_role.agentcore_runtime.id
+  policy = data.aws_iam_policy_document.agentcore_memory[0].json
+}
+
+# --------------------------------------------------------------------------
 # CloudWatch Logs — allow the runtime to write logs and metrics
 # --------------------------------------------------------------------------
 

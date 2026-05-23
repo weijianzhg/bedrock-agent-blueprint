@@ -1,0 +1,16 @@
+# Optional remote Terraform state backend for CI/CD.
+#
+# To enable:
+#   cp infra/backend.tf.example infra/backend.tf
+#
+# Then initialize with backend config:
+#   terraform -chdir=infra init \
+#     -backend-config="bucket=<your-tfstate-bucket>" \
+#     -backend-config="key=bedrock-agent-blueprint/dev/terraform.tfstate" \
+#     -backend-config="region=<aws-region>" \
+#     -backend-config="encrypt=true" \
+#     -backend-config="use_lockfile=true"
+
+terraform {
+  backend "s3" {}
+}

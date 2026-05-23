@@ -11,3 +11,20 @@ agent_name    = "bedrock_agent_blueprint"
 container_tag = "latest"
 network_mode  = "PUBLIC"
 log_level     = "INFO"
+
+# Optional AgentCore Memory
+agent_memory_enabled           = true
+agent_memory_namespace         = "agent-memory"
+agent_memory_event_expiry_days = 90
+
+# Optional GitHub Actions OIDC deploy role.
+# Set github_actions_oidc_enabled = true after replacing github_repository.
+github_actions_oidc_enabled = false
+github_repository           = "owner/repo"
+github_oidc_provider_arn    = "" # set if your AWS account already has a GitHub OIDC provider
+github_deploy_branch        = "main"
+
+# Optional remote Terraform state settings used by CI/CD workflows.
+# Create infra/backend.tf from infra/backend.tf.example before relying on these.
+terraform_state_bucket = "replace-with-your-tfstate-bucket"
+terraform_state_key    = "bedrock-agent-blueprint/dev/terraform.tfstate"
