@@ -64,3 +64,76 @@ variable "log_level" {
   type        = string
   default     = "INFO"
 }
+
+# --------------------------------------------------------------------------
+# Optional AgentCore Memory
+# --------------------------------------------------------------------------
+
+variable "agent_memory_enabled" {
+  description = "Whether to create AgentCore Memory resources and expose their IDs to the runtime"
+  type        = bool
+  default     = true
+}
+
+variable "agent_memory_name" {
+  description = "Optional explicit AgentCore Memory name. Defaults to a sanitized project/environment name."
+  type        = string
+  default     = null
+}
+
+variable "agent_memory_namespace" {
+  description = "Namespace used for semantic memory records"
+  type        = string
+  default     = "agent-memory"
+}
+
+variable "agent_memory_event_expiry_days" {
+  description = "Number of days AgentCore Memory events are retained"
+  type        = number
+  default     = 90
+
+  validation {
+    condition     = var.agent_memory_event_expiry_days >= 1
+    error_message = "agent_memory_event_expiry_days must be at least 1."
+  }
+}
+
+# --------------------------------------------------------------------------
+# Optional GitHub Actions OIDC role
+# --------------------------------------------------------------------------
+
+variable "github_actions_oidc_enabled" {
+  description = "Whether Terraform should create an IAM role for GitHub Actions OIDC deployments"
+  type        = bool
+  default     = false
+}
+
+variable "github_repository" {
+  description = "GitHub repository allowed to assume the deploy role, in owner/repo form"
+  type        = string
+  default     = ""
+}
+
+variable "github_oidc_provider_arn" {
+  description = "Optional existing GitHub Actions OIDC provider ARN. Leave empty to create one when github_actions_oidc_enabled is true."
+  type        = string
+  default     = ""
+}
+
+variable "github_deploy_branch" {
+  description = "Branch allowed to assume the deploy role"
+  type        = string
+  default     = "main"
+}
+
+variable "terraform_state_bucket" {
+  description = "Optional S3 bucket used by CI for Terraform state. Required only when granting CI state access."
+  type        = string
+  default     = ""
+}
+
+variable "terraform_state_key" {
+  description = "Optional S3 key used by CI for Terraform state. Required only when granting CI state access."
+  type        = string
+  default     = ""
+}

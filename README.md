@@ -20,18 +20,23 @@ flowchart TB
         RT[Agent Runtime MicroVM]
         Strands[Strands Agent Loop]
         Tools[Agent Tools]
+        Memory[AgentCore Memory]
     end
 
     subgraph infra [AWS Infrastructure]
         IAM[IAM Roles and Policies]
         CW[CloudWatch and OTEL]
         Bedrock[Bedrock Model Access]
+        Actions[GitHub Actions OIDC]
     end
 
     Code --> Docker --> ECR --> RT
     TF --> IAM
+    TF --> Memory
+    TF --> Actions
     TF --> RT
     RT --> Strands --> Tools
+    Tools --> Memory
     Strands --> Bedrock
     RT --> CW
 ```
@@ -45,23 +50,33 @@ bedrock-agent-blueprint/
 │   ├── pyproject.toml
 │   ├── uv.lock
 │   ├── main.py
+│   ├── memory.py
 │   └── tools.py
 │
-├── infra/                         # Terraform (ECR, IAM, AgentCore Runtime)
+├── infra/                         # Terraform (ECR, IAM, AgentCore Runtime, Memory)
 │   ├── main.tf
 │   ├── variables.tf
 │   ├── iam.tf
+│   ├── ci.tf
 │   ├── ecr.tf
 │   ├── agent.tf
+│   ├── memory.tf
 │   ├── outputs.tf
+│   ├── backend.tf.example
 │   └── terraform.tfvars.example
+│
+├── .github/workflows/
+│   ├── ci.yml                     # PR tests and Terraform validation
+│   ├── deploy.yml                 # Build, push, and deploy on main
+│   └── rollback.yml               # Roll back to a previous ECR image tag
 │
 ├── scripts/
 │   ├── build_and_push.sh          # Build Docker image and push to ECR
 │   └── invoke.py                  # Call the deployed agent
 │
 ├── tests/
-│   └── test_agent.py
+│   ├── test_agent.py
+│   └── test_memory.py
 │
 ├── .gitignore
 └── README.md
@@ -136,6 +151,83 @@ After the initial setup, the development loop is always the same two commands:
 ./scripts/build_and_push.sh
 terraform -chdir=infra apply -var="container_tag=<new-sha>"
 ```
+
+## Long-Term Memory
+
+The blueprint includes optional [AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html) resources and a reusable Python helper in `agents/memory.py`.
+
+When `agent_memory_enabled = true`, Terraform creates:
+
+- an AgentCore Memory resource
+- a semantic memory strategy
+- runtime environment variables:
+  - `AGENTCORE_MEMORY_ID`
+  - `AGENTCORE_MEMORY_STRATEGY_ID`
+  - `AGENTCORE_MEMORY_NAMESPACE`
+- IAM permissions for `CreateEvent`, `BatchCreateMemoryRecords`, and semantic retrieval
+
+The helper writes both an event and a directly queryable semantic record. This matters because event ingestion and semantic retrieval can behave differently; writing a direct record makes new memories available to retrieval quickly.
+
+Example tool usage:
+
+```python
+from memory import retrieve_memory_records, store_memory_record
+
+def summarize_task(task_id: str, summary: dict) -> dict:
+    prior = retrieve_memory_records(f"similar task {summary['kind']}")
+    write = store_memory_record(
+        summary,
+        actor_id="agent",
+        session_id=task_id,
+        purpose="task-summary",
+        metadata={"kind": summary["kind"], "status": summary["status"]},
+    )
+    return {"prior": prior, "write": write}
+```
+
+Memory records use content-hashed idempotency tokens. Identical retries are safe, and enriched content can create a new record instead of failing with a duplicate-token hash mismatch.
+
+Keep public-template memory generic. Store reusable facts, task summaries, user-approved preferences, and operational metadata. Do not store secrets, credentials, raw private documents, or project-specific identifiers unless your own application has explicit permission and retention rules.
+
+## CI/CD
+
+The template includes three GitHub Actions workflows:
+
+- `ci.yml` runs Python tests and Terraform formatting/validation on pull requests.
+- `deploy.yml` runs tests, builds an ARM64 image, pushes it to ECR using the merge SHA and `latest` tags, then applies Terraform with `container_tag=${GITHUB_SHA}`.
+- `rollback.yml` verifies an existing ECR tag and reapplies Terraform with that tag.
+
+For GitHub Actions deployments:
+
+1. Create a remote Terraform state bucket.
+2. Enable the optional backend:
+
+```bash
+cp infra/backend.tf.example infra/backend.tf
+```
+
+3. Set repository variables:
+
+```text
+AWS_REGION       # for example eu-west-1
+TF_STATE_BUCKET  # your Terraform state bucket
+TF_STATE_KEY     # for example bedrock-agent-blueprint/dev/terraform.tfstate
+```
+
+4. Create or supply an IAM role for GitHub Actions OIDC and store it as the repository secret `AWS_ROLE_TO_ASSUME`.
+
+Terraform can create a starter deploy role:
+
+```hcl
+github_actions_oidc_enabled = true
+github_repository           = "owner/repo"
+github_oidc_provider_arn    = "" # optional: reuse an existing provider ARN
+github_deploy_branch        = "main"
+terraform_state_bucket      = "your-tfstate-bucket"
+terraform_state_key         = "bedrock-agent-blueprint/dev/terraform.tfstate"
+```
+
+Apply once from a trusted local machine, then copy the `ci_deploy_role_arn` output into the `AWS_ROLE_TO_ASSUME` secret.
 
 ## Local Development
 

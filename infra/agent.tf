@@ -19,5 +19,12 @@ resource "aws_bedrockagentcore_agent_runtime" "this" {
 
   environment_variables = {
     LOG_LEVEL = var.log_level
+    AGENTCORE_MEMORY_ID = (
+      var.agent_memory_enabled ? aws_bedrockagentcore_memory.this[0].id : ""
+    )
+    AGENTCORE_MEMORY_STRATEGY_ID = (
+      var.agent_memory_enabled ? aws_bedrockagentcore_memory_strategy.semantic[0].memory_strategy_id : ""
+    )
+    AGENTCORE_MEMORY_NAMESPACE = var.agent_memory_namespace
   }
 }

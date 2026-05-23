@@ -1,0 +1,103 @@
+name: Deploy AgentCore Runtime
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-1' }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  TF_STATE_KEY: ${{ vars.TF_STATE_KEY || 'bedrock-agent-blueprint/dev/terraform.tfstate' }}
+  TF_VAR_aws_region: ${{ vars.AWS_REGION || 'eu-west-1' }}
+  TF_VAR_github_repository: ${{ github.repository }}
+  TF_VAR_github_deploy_branch: main
+  TF_VAR_terraform_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+  TF_VAR_terraform_state_key: ${{ vars.TF_STATE_KEY || 'bedrock-agent-blueprint/dev/terraform.tfstate' }}
+
+jobs:
+  deploy:
+    name: Test, Build, and Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          enable-cache: true
+
+      - name: Run tests
+        working-directory: agents
+        run: |
+          uv sync --dev --frozen
+          uv run pytest ../tests/ -v
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+
+      - name: Initialize Terraform
+        run: |
+          if [ -f infra/backend.tf ]; then
+            terraform -chdir=infra init \
+              -backend-config="bucket=${TF_STATE_BUCKET}" \
+              -backend-config="key=${TF_STATE_KEY}" \
+              -backend-config="region=${AWS_REGION}" \
+              -backend-config="encrypt=true" \
+              -backend-config="use_lockfile=true"
+          else
+            terraform -chdir=infra init
+          fi
+
+      - name: Ensure ECR repository exists
+        run: |
+          terraform -chdir=infra apply -auto-approve \
+            -target=aws_ecr_repository.agent \
+            -target=aws_ecr_lifecycle_policy.agent
+
+      - name: Resolve ECR repository URL
+        id: ecr
+        run: echo "repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: agents
+          file: agents/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.repository_url }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.repository_url }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy AgentCore Runtime
+        run: terraform -chdir=infra apply -auto-approve -var="container_tag=${GITHUB_SHA}"
