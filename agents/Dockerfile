@@ -5,6 +5,11 @@
 
 FROM --platform=linux/arm64 ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
+# A small, useful computer: Python comes from the base image; add Git and Node.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash ca-certificates curl git nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Install dependencies first (layer caching via uv.lock)
@@ -14,9 +19,12 @@ RUN uv sync --frozen --no-dev --no-install-project
 # Copy agent source code
 COPY . .
 
+ENV WORKSPACE_DIR=/mnt/workspace \
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1
+
 # AgentCore Runtime expects the application on port 8080
 EXPOSE 8080
 
-# opentelemetry-instrument enables automatic CloudWatch observability
-# without any code changes in the agent itself.
-CMD ["uv", "run", "opentelemetry-instrument", "python", "main.py"]
+# Run exactly the dependencies installed above; AgentCore captures runtime logs.
+CMD ["uv", "run", "--no-sync", "python", "main.py"]

@@ -10,6 +10,7 @@ build/
 venv/
 *.egg
 .pytest_cache/
+workspace/
 
 # -------------------------------------------------------------------
 # Terraform

@@ -59,7 +59,7 @@ data "aws_iam_policy_document" "bedrock_invoke" {
     ]
     resources = [
       "arn:aws:bedrock:*::foundation-model/*",
-      "arn:aws:bedrock:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+      "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
     ]
   }
 }
@@ -71,34 +71,7 @@ resource "aws_iam_role_policy" "bedrock_invoke" {
 }
 
 # --------------------------------------------------------------------------
-# AgentCore Memory — allow the agent to store and retrieve long-term memory
-# --------------------------------------------------------------------------
-
-data "aws_iam_policy_document" "agentcore_memory" {
-  count = var.agent_memory_enabled ? 1 : 0
-
-  statement {
-    effect = "Allow"
-    actions = [
-      "bedrock-agentcore:BatchCreateMemoryRecords",
-      "bedrock-agentcore:CreateEvent",
-      "bedrock-agentcore:ListMemoryRecords",
-      "bedrock-agentcore:RetrieveMemoryRecords",
-    ]
-    resources = ["*"]
-  }
-}
-
-resource "aws_iam_role_policy" "agentcore_memory" {
-  count = var.agent_memory_enabled ? 1 : 0
-
-  name   = "agentcore-memory"
-  role   = aws_iam_role.agentcore_runtime.id
-  policy = data.aws_iam_policy_document.agentcore_memory[0].json
-}
-
-# --------------------------------------------------------------------------
-# CloudWatch Logs — allow the runtime to write logs and metrics
+# CloudWatch Logs — allow the runtime to write logs
 # --------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "cloudwatch_logs" {
@@ -110,7 +83,7 @@ data "aws_iam_policy_document" "cloudwatch_logs" {
       "logs:PutLogEvents",
     ]
     resources = [
-      "arn:aws:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/*",
+      "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/*",
     ]
   }
 }
