@@ -70,18 +70,23 @@ jobs:
             terraform -chdir=infra init
           fi
 
+      - name: Set up ARM64 emulation
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
       - name: Ensure ECR repository exists
         run: |
-          terraform -chdir=infra apply -auto-approve \
+          terraform -chdir=infra apply -input=false -auto-approve \
             -target=aws_ecr_repository.agent \
             -target=aws_ecr_lifecycle_policy.agent
 
       - name: Resolve ECR repository URL
         id: ecr
         run: echo "repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -92,6 +97,7 @@ jobs:
           context: agents
           file: agents/Dockerfile
           platforms: linux/arm64
+          provenance: false
           push: true
           tags: |
             ${{ steps.ecr.outputs.repository_url }}:${{ github.sha }}
