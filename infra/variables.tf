@@ -51,7 +51,7 @@ variable "container_tag" {
 variable "model_id" {
   description = "Bedrock model or inference profile ID available in the deployment region"
   type        = string
-  default     = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  default     = "eu.anthropic.claude-sonnet-5"
 }
 
 variable "log_level" {

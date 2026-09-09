@@ -13,6 +13,7 @@
 
 ### Changed
 
+- Set Claude Sonnet 5 as the default Bedrock model through the EU inference profile.
 - Reframed the template around a small, extensible cloud agent workspace and documented its execution and storage limits.
 - Required AWS Terraform provider 6.46 or newer within major version 6 for managed session storage.
 - Ensured runtime IAM policies are created before the runtime starts, and removed deprecated region data-source usage.

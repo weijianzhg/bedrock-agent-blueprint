@@ -9,7 +9,7 @@ environment  = "dev"
 # Cloud agent workspace settings
 agent_name    = "bedrock_agent_blueprint"
 container_tag = "latest"
-model_id      = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+model_id      = "eu.anthropic.claude-sonnet-5"
 log_level     = "INFO"
 
 # Optional GitHub Actions OIDC deploy role.

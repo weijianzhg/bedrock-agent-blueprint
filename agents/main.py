@@ -17,7 +17,7 @@ from tools import Workspace
 app = BedrockAgentCoreApp()
 # One writer at a time keeps commands and conversation updates in order.
 invocation_lock = Lock()
-DEFAULT_MODEL = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+DEFAULT_MODEL = "eu.anthropic.claude-sonnet-5"
 
 SYSTEM_PROMPT = """You are a general cloud agent working in a Linux workspace.
 Complete the user's task using files and commands. Inspect existing work first,

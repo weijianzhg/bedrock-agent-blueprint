@@ -42,7 +42,7 @@ uv sync --project agents --dev --frozen
 terraform -chdir=infra apply -var="container_tag=<tag-printed-by-build-script>"
 ```
 
-Use the same AWS region in your profile, environment, and Terraform configuration. The default model is `eu.anthropic.claude-sonnet-4-5-20250929-v1:0`; choose an available model or inference profile when deploying elsewhere.
+Use the same AWS region in your profile, environment, and Terraform configuration. The default model is [Claude Sonnet 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5.html), using `eu.anthropic.claude-sonnet-5`; choose an available model or inference profile when deploying elsewhere.
 
 The build script initializes Terraform, provisions the ECR repository, builds the ARM64 image, and pushes a versioned tag plus `latest`. The default tag combines the Git SHA and build time; use `IMAGE_TAG` to supply your own. The final Terraform apply creates the runtime. For later changes, build again and apply with the new image tag.
 
