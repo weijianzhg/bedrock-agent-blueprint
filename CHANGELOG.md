@@ -4,13 +4,24 @@
 
 ### Added
 
-- Added optional AgentCore Memory infrastructure, including memory resources, a semantic strategy, runtime environment variables, IAM permissions, and Terraform outputs.
-- Added reusable Python memory helpers for storing durable memory events, writing directly queryable semantic records, retrieving similar records, and using content-hashed idempotency tokens.
-- Added a short memory wiki covering when to use memory, why it helps, what to store, and how to verify it.
-- Added example GitHub Actions workflows for pull request CI, main-branch runtime deployment, and manual rollback to a previous ECR image tag. These live outside `.github/workflows` so CI/CD is not enabled in the template repository by default.
-- Added optional Terraform support for a GitHub Actions OIDC deploy role, including reuse of an existing account-level GitHub OIDC provider.
-- Documented memory usage, optional CI/CD setup, rollback flow, and optional remote Terraform state configuration.
+- General cloud agent workspace with shell, file reading, file writing, and directory listing tools.
+- Python, Bash, Git, Node.js, npm, and curl in the ARM64 runtime container.
+- Managed AgentCore session storage and file-backed Strands conversation history, resumed using the same session ID.
+- CLI support for session continuation, file listing, text-file downloads, AWS profiles, and JSON output.
+- Configurable Bedrock model through `MODEL_ID` and Terraform's `model_id` variable.
+- Example GitHub Actions workflows for CI, deployment, and rollback, plus an optional OIDC deployment role and remote-state configuration.
 
 ### Changed
 
-- Expanded the blueprint architecture and project structure docs to include memory and CI/CD components.
+- Reframed the template around a small, extensible cloud agent workspace and documented its execution and storage limits.
+- Required AWS Terraform provider 6.46 or newer within major version 6 for managed session storage.
+- Ensured runtime IAM policies are created before the runtime starts, and removed deprecated region data-source usage.
+- Simplified first-deploy ECR bootstrapping and used a fresh image tag for each local build.
+- Kept runtime dependencies fixed at startup and ran workspace tools sequentially.
+
+### Removed
+
+- Demonstration weather, calculator, and inventory tools.
+- AgentCore Memory infrastructure, permissions, configuration, Python helpers, tests, and documentation.
+- Incomplete VPC networking toggle; the starter uses public networking with IAM-authenticated invocation.
+- Automatic tracing setup and its extra dependencies; runtime logs work without account-wide tracing configuration.
