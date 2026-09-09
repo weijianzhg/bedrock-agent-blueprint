@@ -22,7 +22,7 @@ variable "environment" {
 }
 
 # --------------------------------------------------------------------------
-# Agent settings
+# Cloud agent workspace settings
 # --------------------------------------------------------------------------
 
 variable "agent_name" {
@@ -39,7 +39,7 @@ variable "agent_name" {
 variable "agent_description" {
   description = "Description for the AgentCore runtime"
   type        = string
-  default     = "Strands agent deployed via bedrock-agent-blueprint"
+  default     = "Cloud agent workspace powered by Strands and AgentCore Runtime"
 }
 
 variable "container_tag" {
@@ -48,54 +48,16 @@ variable "container_tag" {
   default     = "latest"
 }
 
-variable "network_mode" {
-  description = "Network mode for the AgentCore runtime (PUBLIC or VPC)"
+variable "model_id" {
+  description = "Bedrock model or inference profile ID available in the deployment region"
   type        = string
-  default     = "PUBLIC"
-
-  validation {
-    condition     = contains(["PUBLIC", "VPC"], var.network_mode)
-    error_message = "network_mode must be either PUBLIC or VPC"
-  }
+  default     = "eu.anthropic.claude-sonnet-5"
 }
 
 variable "log_level" {
   description = "Log level passed to the agent container"
   type        = string
   default     = "INFO"
-}
-
-# --------------------------------------------------------------------------
-# Optional AgentCore Memory
-# --------------------------------------------------------------------------
-
-variable "agent_memory_enabled" {
-  description = "Whether to create AgentCore Memory resources and expose their IDs to the runtime"
-  type        = bool
-  default     = true
-}
-
-variable "agent_memory_name" {
-  description = "Optional explicit AgentCore Memory name. Defaults to a sanitized project/environment name."
-  type        = string
-  default     = null
-}
-
-variable "agent_memory_namespace" {
-  description = "Namespace used for semantic memory records"
-  type        = string
-  default     = "agent-memory"
-}
-
-variable "agent_memory_event_expiry_days" {
-  description = "Number of days AgentCore Memory events are retained"
-  type        = number
-  default     = 90
-
-  validation {
-    condition     = var.agent_memory_event_expiry_days >= 1
-    error_message = "agent_memory_event_expiry_days must be at least 1."
-  }
 }
 
 # --------------------------------------------------------------------------

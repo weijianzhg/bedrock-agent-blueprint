@@ -18,16 +18,6 @@ output "agent_runtime_id" {
   value       = aws_bedrockagentcore_agent_runtime.this.agent_runtime_id
 }
 
-output "agent_memory_id" {
-  description = "AgentCore Memory ID, when memory is enabled"
-  value       = var.agent_memory_enabled ? aws_bedrockagentcore_memory.this[0].id : null
-}
-
-output "agent_memory_strategy_id" {
-  description = "AgentCore Memory strategy ID, when memory is enabled"
-  value       = var.agent_memory_enabled ? aws_bedrockagentcore_memory_strategy.semantic[0].memory_strategy_id : null
-}
-
 output "ci_deploy_role_arn" {
   description = "IAM role ARN for GitHub Actions OIDC deployments, when enabled"
   value       = var.github_actions_oidc_enabled ? aws_iam_role.ci_deploy[0].arn : null

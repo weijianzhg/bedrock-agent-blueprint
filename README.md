@@ -1,380 +1,163 @@
-# Bedrock AgentCore Blueprint
+# Cloud Agent Workspace Blueprint
 
-A production-ready template for building AI agents with [Strands Agents SDK](https://strandsagents.com/) and deploying them to [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html). Infrastructure is managed with [Terraform](https://www.terraform.io/).
+A small starting point for a general agent with its own remote Linux workspace. Give it a task, let it use files and commands, then reconnect to continue the work. Build on the template by changing the tools, instructions, model, or container image.
 
-## Architecture
+[Strands Agents](https://strandsagents.com/) runs the agent loop inside [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html). Terraform provisions the runtime, ECR repository, and execution role in your AWS account.
 
 ```mermaid
-flowchart TB
-    subgraph dev [Developer]
-        Code[Agent Code]
-        TF[Terraform]
-    end
-
-    subgraph build [Build and Package]
-        Docker[Docker ARM64 Image]
-        ECR[Amazon ECR]
-    end
-
-    subgraph runtime [AgentCore Runtime]
-        RT[Agent Runtime MicroVM]
-        Strands[Strands Agent Loop]
-        Tools[Agent Tools]
-        Memory[AgentCore Memory]
-    end
-
-    subgraph infra [AWS Infrastructure]
-        IAM[IAM Roles and Policies]
-        CW[CloudWatch and OTEL]
-        Bedrock[Bedrock Model Access]
-        Actions[GitHub Actions OIDC]
-    end
-
-    Code --> Docker --> ECR --> RT
-    TF --> IAM
-    TF --> Memory
-    TF --> Actions
-    TF --> RT
-    RT --> Strands --> Tools
-    Tools --> Memory
-    Strands --> Bedrock
-    RT --> CW
+flowchart LR
+    CLI[CLI or your application] --> Runtime[AgentCore session]
+    Runtime --> Agent[Strands agent]
+    Agent --> Model[Bedrock model]
+    Agent --> Tools[Shell and file tools]
+    Tools --> Workspace[Session workspace]
+    Agent --> History[Conversation files]
+    History --> Workspace
 ```
 
-## Project Structure
+## What you get
 
-```
-bedrock-agent-blueprint/
-├── agents/                        # Agent code (what you edit)
-│   ├── Dockerfile
-│   ├── pyproject.toml
-│   ├── uv.lock
-│   ├── main.py
-│   ├── memory.py
-│   └── tools.py
-│
-├── infra/                         # Terraform (ECR, IAM, AgentCore Runtime, Memory)
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── iam.tf
-│   ├── ci.tf
-│   ├── ecr.tf
-│   ├── agent.tf
-│   ├── memory.tf
-│   ├── outputs.tf
-│   ├── backend.tf.example
-│   └── terraform.tfvars.example
-│
-├── examples/github-workflows/      # Example workflows; not active in this repo
-│   ├── ci.yml                     # PR tests and Terraform validation
-│   ├── deploy.yml                 # Build, push, and deploy on main
-│   └── rollback.yml               # Roll back to a previous ECR image tag
-│
-├── scripts/
-│   ├── build_and_push.sh          # Build Docker image and push to ECR
-│   └── invoke.py                  # Call the deployed agent
-│
-├── tests/
-│   ├── test_agent.py
-│   └── test_memory.py
-│
-├── .gitignore
-└── README.md
-```
+- An ARM64 container with Python, Bash, Git, Node.js, npm, and curl.
+- Four readable tools: `run_shell`, `read_file`, `write_file`, and `list_files`.
+- A workspace and conversation history that resume with the same session ID.
+- A CLI to send tasks, continue sessions, list files, and download text artifacts.
 
-## Prerequisites
+For example, ask the agent to write a program and test it, inspect a public Git repository, or analyze data and save a report. Browser automation, a tool gateway, and a background task scheduler are possible extensions; they are not included.
 
-- **AWS Account** with [AgentCore permissions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html)
-- **Python 3.10+** and [**uv**](https://docs.astral.sh/uv/)
-- **Terraform >= 1.5**
-- **Docker** (with buildx support) for building ARM64 images
-- **AWS CLI** configured with credentials
+## Deploy
 
-> **Tip:** Terraform uses the default AWS credential chain. To use a named profile, run `export AWS_PROFILE=my-profile` before any Terraform or AWS CLI commands.
+You need Python 3.10+, [uv](https://docs.astral.sh/uv/), Terraform 1.5+, Docker with buildx, and an AWS CLI profile. Your AWS account needs AgentCore deployment permissions and access to the selected Bedrock model. Terraform uses AWS provider 6.46 or newer within major version 6.
 
-## Quick Start
-
-### 1. Configure
+From the repository root:
 
 ```bash
-git clone <this-repo>
-cd bedrock-agent-blueprint
+export AWS_PROFILE=your-profile
+export AWS_REGION=eu-west-1
 
 cp infra/terraform.tfvars.example infra/terraform.tfvars
-# Edit infra/terraform.tfvars with your AWS region, project name, etc.
-```
+# Edit aws_region, project_name, and model_id for your account.
 
-### 2. Build and push the agent image
-
-```bash
+uv sync --project agents --dev --frozen
 ./scripts/build_and_push.sh
+terraform -chdir=infra apply -var="container_tag=<tag-printed-by-build-script>"
 ```
 
-The script creates the ECR repository if it doesn't exist yet, builds an ARM64 Docker image, tags it with the current git short SHA (e.g. `a1b2c3d`) and `latest`, and pushes both to ECR.
+Use the same AWS region in your profile, environment, and Terraform configuration. The default model is [Claude Sonnet 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5.html), using `eu.anthropic.claude-sonnet-5`; choose an available model or inference profile when deploying elsewhere.
 
-### 3. Deploy infrastructure and agent runtime
+The build script initializes Terraform, provisions the ECR repository, builds the ARM64 image, and pushes a versioned tag plus `latest`. The default tag combines the Git SHA and build time; use `IMAGE_TAG` to supply your own. The final Terraform apply creates the runtime. For later changes, build again and apply with the new image tag.
+
+When upgrading an existing checkout, run `terraform -chdir=infra init -upgrade` once to update the locked AWS provider before building. Remove obsolete `agent_memory_*` and `network_mode` settings from your `.tfvars` file. The next full apply removes any previously managed AgentCore Memory resources.
+
+## Give the agent a task
+
+The CLI reads the runtime ARN from Terraform output. Add `--arn <runtime-arn>` to call a runtime directly, or `--profile your-profile --region eu-west-1` to override your AWS configuration.
 
 ```bash
-terraform -chdir=infra init
-terraform -chdir=infra apply -var="container_tag=<git-sha>"
+uv run --project agents python scripts/invoke.py \
+  --prompt "Create a Python CSV summary tool and tests. Run the tests and save a short README."
 ```
 
-Use the tag printed at the end of the build script. Terraform imports the ECR repository the build script created, provisions IAM roles, and creates the AgentCore runtime pointing at your image.
-
-### 4. Invoke the agent
+Save the session ID printed by the command. Pass it again to use the same files and conversation:
 
 ```bash
-# Uses the built-in get_weather tool
-python scripts/invoke.py --prompt "What's the weather in Seattle?"
+uv run --project agents python scripts/invoke.py \
+  --session-id <saved-session-id> \
+  --prompt "Add an example CSV, run the tool on it, and save the output as summary.txt."
 
-# Uses the built-in calculate tool
-python scripts/invoke.py --prompt "What is sqrt(144) + 3 * 2?"
+uv run --project agents python scripts/invoke.py \
+  --session-id <saved-session-id> --list-files
 
-# Uses the built-in lookup_item tool
-python scripts/invoke.py --prompt "Look up item ITEM-001 in inventory"
+uv run --project agents python scripts/invoke.py \
+  --session-id <saved-session-id> \
+  --download summary.txt --output ./summary.txt
 ```
 
+Omitting `--session-id` for a prompt creates a new session. File operations require an existing session ID and do not invoke the model. `--list-files path/to/directory` lists a subdirectory; `--json` returns the full response. Downloads accept UTF-8 text files up to 1 MiB and never overwrite an existing local file.
 
-You can also pass the runtime ARN directly:
+## How sessions work
+
+AgentCore provides an isolated runtime session and mounts managed session storage at `/mnt/workspace`. The application uses `WORKSPACE_DIR/<sha256-of-session-id>/` for working files and stores Strands conversation history in its `.conversation/` directory. Hashing keeps even maximum-length session IDs within filesystem limits. There is no AgentCore Memory resource or separate database.
+
+Reuse the session ID to continue after the runtime compute stops. Managed session storage is currently **Preview**, expires after **14 days without an invocation**, and resets when the **runtime version changes**, including a deployment. Download deliverables before updating or deleting the runtime; these workspaces are not permanent backups. See [AWS filesystem lifecycle documentation](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-filesystem-configurations.html).
+
+The storage limit is **1 GB per session**, including dependencies, artifacts, and conversation history. See [AgentCore quotas](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/bedrock-agentcore-limits.html).
+
+## Execution boundaries
+
+This is a starter for trusted callers. The runtime uses `PUBLIC` networking and IAM-authenticated invocation. A session ID selects a workspace; applications serving multiple users must control which sessions each user can access.
+
+Shell commands run with the container's permissions and can access its runtime-role credentials and network. File-tool path checks catch mistakes; they do not restrict the shell. The system prompt asks for care with external writes, but model instructions are not a permission boundary. Keep the execution role limited to what your agent should be allowed to do. Local execution uses your machine's permissions and AWS credentials.
+
+The implementation processes one request at a time per runtime process and returns a busy error for overlapping requests. Each shell call starts in the workspace, uses a fresh noninteractive Bash process, defaults to a 60-second timeout, and allows at most 120 seconds. Output is capped at 20 KB; background services are not supported. Larger jobs should be split into steps or handled by an extension you add.
+
+File read/write tools accept UTF-8 files up to 1 MiB. Listings omit hidden files and symlinks and return up to 500 entries; the shell remains available for other filesystem operations.
+
+## Run locally
+
+The same agent can run without deploying infrastructure. Model requests still use Amazon Bedrock and your AWS credentials. Choose a local directory for the workspace:
 
 ```bash
-python scripts/invoke.py \
-  --arn "arn:aws:bedrock-agentcore:eu-west-1:123456789012:runtime/my-agent" \
-  --prompt "What's the weather in Seattle?"
+AWS_PROFILE=your-profile AWS_REGION=eu-west-1 \
+  WORKSPACE_DIR="$PWD/workspace" \
+  uv run --project agents python agents/main.py
 ```
 
-### Day-to-day workflow
-
-After the initial setup, the development loop is always the same two commands:
+In another terminal, invoke it with a session header:
 
 ```bash
-./scripts/build_and_push.sh
-terraform -chdir=infra apply -var="container_tag=<new-sha>"
+curl http://localhost:8080/invocations \
+  -H 'Content-Type: application/json' \
+  -H 'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id: 12345678-1234-1234-1234-123456789012' \
+  -d '{"prompt":"Write hello.py, run it, and save the output in hello.txt."}'
 ```
 
-## Long-Term Memory
+Reuse that header for follow-ups. The API also accepts `{"action":"list_files","path":"."}` and `{"action":"read_file","path":"hello.txt"}` for direct file retrieval. Without a header, local requests share the `local` session.
 
-The blueprint includes optional [AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html) resources and a reusable Python helper in `agents/memory.py`.
-
-For guidance on when to use memory, what to store, and how to verify it, see [docs/memory.md](docs/memory.md).
-
-When `agent_memory_enabled = true`, Terraform creates:
-
-- an AgentCore Memory resource
-- a semantic memory strategy
-- runtime environment variables:
-  - `AGENTCORE_MEMORY_ID`
-  - `AGENTCORE_MEMORY_STRATEGY_ID`
-  - `AGENTCORE_MEMORY_NAMESPACE`
-- IAM permissions for `CreateEvent`, `BatchCreateMemoryRecords`, and semantic retrieval
-
-The helper writes both an event and a directly queryable semantic record. This matters because event ingestion and semantic retrieval can behave differently; writing a direct record makes new memories available to retrieval quickly.
-
-Example tool usage:
-
-```python
-from memory import retrieve_memory_records, store_memory_record
-
-def summarize_task(task_id: str, summary: dict) -> dict:
-    prior = retrieve_memory_records(f"similar task {summary['kind']}")
-    write = store_memory_record(
-        summary,
-        actor_id="agent",
-        session_id=task_id,
-        purpose="task-summary",
-        metadata={"kind": summary["kind"], "status": summary["status"]},
-    )
-    return {"prior": prior, "write": write}
-```
-
-Memory records use content-hashed idempotency tokens. Identical retries are safe, and enriched content can create a new record instead of failing with a duplicate-token hash mismatch.
-
-Keep public-template memory generic. Store reusable facts, task summaries, user-approved preferences, and operational metadata. Do not store secrets, credentials, raw private documents, or project-specific identifiers unless your own application has explicit permission and retention rules.
-
-## CI/CD
-
-The template includes three example GitHub Actions workflows under `examples/github-workflows/`.
-
-They are intentionally not stored in `.github/workflows`, so this public template repository does not run CI/CD by default. To enable them in your own generated project, copy the files into `.github/workflows/`.
-
-- `ci.yml` runs Python tests and Terraform formatting/validation on pull requests.
-- `deploy.yml` runs tests, builds an ARM64 image, pushes it to ECR using the merge SHA and `latest` tags, then applies Terraform with `container_tag=${GITHUB_SHA}`.
-- `rollback.yml` verifies an existing ECR tag and reapplies Terraform with that tag.
-
-For GitHub Actions deployments:
-
-1. Create a remote Terraform state bucket.
-2. Enable the optional backend:
+Run the tests and Terraform checks without AWS credentials:
 
 ```bash
-cp infra/backend.tf.example infra/backend.tf
+uv run --project agents pytest tests/ -v
+terraform -chdir=infra fmt -check
+terraform -chdir=infra init -backend=false
+terraform -chdir=infra validate
 ```
 
-3. Set repository variables:
+## Make it yours
 
-```text
-AWS_REGION       # for example eu-west-1
-TF_STATE_BUCKET  # your Terraform state bucket
-TF_STATE_KEY     # for example bedrock-agent-blueprint/dev/terraform.tfstate
-```
+| File | What to change |
+| --- | --- |
+| [agents/main.py](agents/main.py) | System prompt, model, tool registration, and request handling |
+| [agents/tools.py](agents/tools.py) | Workspace tools and their limits |
+| [agents/Dockerfile](agents/Dockerfile) | Programs available in the remote computer |
+| [scripts/invoke.py](scripts/invoke.py) | CLI or an example for your own application |
+| [infra/agent.tf](infra/agent.tf) | Runtime settings, storage, and environment variables |
+| [infra/iam.tf](infra/iam.tf) | The runtime's AWS permissions |
 
-4. Create or supply an IAM role for GitHub Actions OIDC and store it as the repository secret `AWS_ROLE_TO_ASSUME`.
+To add a tool, add a method with the Strands `@tool` decorator to `Workspace` and register it in `create_agent()` in `agents/main.py`. Keep its docstring clear: the model uses it to understand when and how to call the tool.
 
-Terraform can create a starter deploy role:
+To change the model, set `model_id` in `infra/terraform.tfvars`, or `MODEL_ID` when running locally. Install project dependencies inside the workspace so they survive a session restart. Keep changes to the base environment in the Dockerfile.
 
-```hcl
-github_actions_oidc_enabled = true
-github_repository           = "owner/repo"
-github_oidc_provider_arn    = "" # optional: reuse an existing provider ARN
-github_deploy_branch        = "main"
-terraform_state_bucket      = "your-tfstate-bucket"
-terraform_state_key         = "bedrock-agent-blueprint/dev/terraform.tfstate"
-```
+AgentCore captures runtime logs in CloudWatch. Tracing is an optional extension: follow [AgentCore observability setup](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability.html) before adding OpenTelemetry instrumentation to the container.
 
-Apply once from a trusted local machine, then copy the `ci_deploy_role_arn` output into the `AWS_ROLE_TO_ASSUME` secret.
+## Optional GitHub Actions
 
-## Local Development
+[examples/github-workflows/](examples/github-workflows/) contains CI, deployment, and rollback examples. They are inactive until copied into `.github/workflows/` in your own repository.
 
-You can test the agent locally without deploying to AWS.
+For CI deployments, create an S3 state bucket, copy `infra/backend.tf.example` to `infra/backend.tf`, and initialize it with the configuration documented in that file. If you already deployed locally, migrate your existing state. Configure repository variables `AWS_REGION`, `TF_STATE_BUCKET`, and `TF_STATE_KEY`, plus the OIDC role secret `AWS_ROLE_TO_ASSUME`.
 
-### Run the agent locally
+Terraform can create the starter OIDC role: set `github_actions_oidc_enabled = true`, configure `github_repository` and the state bucket/key variables, apply locally, and use the `ci_deploy_role_arn` output. Set `github_oidc_provider_arn` if the account already has a GitHub OIDC provider. Carry your Terraform deployment settings into CI so workflows use the same resource names, model, and OIDC settings. Keep `github_actions_oidc_enabled = true` in CI when using the managed role, or Terraform will plan to delete it.
 
-```bash
-cd agents
-uv sync
-uv run python main.py
-```
+The deployment example tests the code, builds the image, and applies Terraform. Rollback redeploys an existing ECR image tag; it also updates the runtime version and therefore resets session storage.
 
-Then, in another terminal:
+## Remove the deployment
 
-```bash
-curl -X POST http://localhost:8080/invocations \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Hello!"}'
-```
-
-### Run the tests
-
-```bash
-cd agents
-uv sync --dev
-uv run pytest ../tests/ -v
-```
-
-The tests exercise tool functions directly -- no AWS credentials needed.
-
-## The Agent
-
-The included agent (`agents/`) demonstrates custom tool integration using the Strands `@tool` decorator. It comes with three example tools:
-
-- **`get_weather`** -- Returns weather data for a city (mock, replace with a real API)
-- **`calculate`** -- Safely evaluates math expressions
-- **`lookup_item`** -- Searches a database by item ID (mock, replace with DynamoDB/RDS)
-
-## Customization
-
-### Add your own tools
-
-1. Create a new function in `tools.py` (or a new file):
-
-```python
-from strands import tool
-
-@tool
-def my_tool(param: str) -> dict:
-    """Description of what this tool does.
-
-    Args:
-        param: Description of the parameter.
-    """
-    return {"status": "success", "content": [{"text": do_something(param)}]}
-```
-
-2. Import and add it to the agent's `tools` list in `main.py`:
-
-```python
-from tools import my_tool
-
-agent = Agent(
-    tools=[my_tool],
-    system_prompt="...",
-)
-```
-
-### Change the model
-
-The agent uses Claude Sonnet 4.5 via cross-region inference (`eu.anthropic.claude-sonnet-4-5-20250929-v1:0`) by default. To use a different model or region prefix, update `main.py`:
-
-```python
-from strands.models.bedrock import BedrockModel
-
-model = BedrockModel(model_id="us.anthropic.claude-sonnet-4-5-20250929-v1:0")
-
-agent = Agent(
-    model=model,
-    system_prompt="...",
-)
-```
-
-### Switch to VPC networking
-
-In `infra/terraform.tfvars`:
-
-```hcl
-network_mode = "VPC"
-```
-
-You will also need to add `subnets` and `security_groups` to the network configuration in `infra/agent.tf`.
-
-### Add JWT authorization
-
-Add an `authorizer_configuration` block to the runtime resource in `infra/agent.tf`:
-
-```hcl
-authorizer_configuration {
-  custom_jwt_authorizer {
-    discovery_url    = "https://accounts.google.com/.well-known/openid-configuration"
-    allowed_audience = ["my-app"]
-    allowed_clients  = ["client-123"]
-  }
-}
-```
-
-## Observability
-
-The Dockerfile includes `opentelemetry-instrument`, which automatically sends traces and metrics to CloudWatch -- no code changes needed.
-
-To view your agent's observability data:
-
-1. Enable [CloudWatch Transaction Search](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability.html) (one-time setup)
-2. Open the CloudWatch console
-3. Navigate to **GenAI Observability** to see traces, metrics, and logs
-
-## Tear Down
-
-To remove all deployed resources and avoid ongoing charges:
+Download any files you want to keep, then run:
 
 ```bash
 terraform -chdir=infra destroy
 ```
 
-This deletes the AgentCore runtime, IAM roles, and the ECR repository (including all pushed images for non-prod environments).
-
-> **Note:** In production (`environment = "prod"`), the ECR repository has deletion protection enabled. You will need to manually empty and delete it, or set `force_delete = true` in `infra/ecr.tf` before destroying.
-
-## When To Use This Setup
-
-**Use Strands + AgentCore Runtime when:**
-
-- You want full control over agent reasoning
-- You care about research-grade agent design
-- You expect agents to evolve rapidly
-- You still want serverless scaling, IAM, and observability
-
-**Consider native Bedrock Agents instead if:**
-
-- You want the simplest possible Bedrock-native agent
-- You're fine with AWS-managed planning logic
+This removes the runtime, its session storage, Terraform-managed roles, and the ECR repository. In non-production environments it also deletes stored images. With `environment = "prod"`, empty the ECR repository before destroying it. Separately managed resources such as your Terraform state bucket remain.
 
 ## License
 

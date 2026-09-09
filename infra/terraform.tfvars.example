@@ -2,20 +2,15 @@
 #
 #   cp terraform.tfvars.example terraform.tfvars
 
-aws_region    = "eu-west-1"
-project_name  = "bedrock-agent-blueprint"
-environment   = "dev"
+aws_region   = "eu-west-1"
+project_name = "bedrock-agent-blueprint"
+environment  = "dev"
 
-# Agent settings
+# Cloud agent workspace settings
 agent_name    = "bedrock_agent_blueprint"
 container_tag = "latest"
-network_mode  = "PUBLIC"
+model_id      = "eu.anthropic.claude-sonnet-5"
 log_level     = "INFO"
-
-# Optional AgentCore Memory
-agent_memory_enabled           = true
-agent_memory_namespace         = "agent-memory"
-agent_memory_event_expiry_days = 90
 
 # Optional GitHub Actions OIDC deploy role.
 # Set github_actions_oidc_enabled = true after replacing github_repository.

@@ -3,8 +3,9 @@ terraform {
 
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.70.0"
+      source = "hashicorp/aws"
+      # Managed session storage was added in AWS provider 6.46.
+      version = ">= 6.46.0, < 7.0.0"
     }
   }
 }
@@ -21,7 +22,6 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "current" {}
-data "aws_region" "current" {}
 
 locals {
   name_prefix = "${var.project_name}-${var.environment}"

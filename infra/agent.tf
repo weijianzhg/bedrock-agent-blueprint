@@ -1,5 +1,5 @@
 # --------------------------------------------------------------------------
-# AgentCore Runtime
+# Cloud agent workspace on AgentCore Runtime
 # --------------------------------------------------------------------------
 
 resource "aws_bedrockagentcore_agent_runtime" "this" {
@@ -14,17 +14,26 @@ resource "aws_bedrockagentcore_agent_runtime" "this" {
   }
 
   network_configuration {
-    network_mode = var.network_mode
+    network_mode = "PUBLIC"
+  }
+
+  # Files survive stop/resume when the caller reuses the same session ID.
+  # Storage expires after 14 idle days and resets on runtime version updates.
+  filesystem_configuration {
+    session_storage {
+      mount_path = "/mnt/workspace"
+    }
   }
 
   environment_variables = {
-    LOG_LEVEL = var.log_level
-    AGENTCORE_MEMORY_ID = (
-      var.agent_memory_enabled ? aws_bedrockagentcore_memory.this[0].id : ""
-    )
-    AGENTCORE_MEMORY_STRATEGY_ID = (
-      var.agent_memory_enabled ? aws_bedrockagentcore_memory_strategy.semantic[0].memory_strategy_id : ""
-    )
-    AGENTCORE_MEMORY_NAMESPACE = var.agent_memory_namespace
+    WORKSPACE_DIR = "/mnt/workspace"
+    MODEL_ID      = var.model_id
+    LOG_LEVEL     = var.log_level
   }
+
+  depends_on = [
+    aws_iam_role_policy.ecr_pull,
+    aws_iam_role_policy.bedrock_invoke,
+    aws_iam_role_policy.cloudwatch_logs,
+  ]
 }
