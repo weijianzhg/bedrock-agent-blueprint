@@ -52,6 +52,30 @@ def get_runtime_arn_from_terraform(profile: str | None = None) -> str:
     return runtime_arn
 
 
+def read_streamed_result(stream) -> dict:
+    """Consume AgentCore SSE heartbeats until the final result arrives."""
+    reported_progress = False
+    # Read small chunks so a heartbeat is visible without waiting for more data.
+    for line in stream.iter_lines(chunk_size=1):
+        if not line.startswith(b"data:"):
+            continue
+        event = json.loads(line[5:].decode("utf-8"))
+        if not isinstance(event, dict):
+            raise ValueError("The agent returned an invalid stream event: expected a JSON object.")
+        if event.get("type") == "heartbeat":
+            if not reported_progress:
+                print("Agent is working...", file=sys.stderr, flush=True)
+                reported_progress = True
+            continue
+        if "result" in event or "error" in event:
+            return event
+        raise ValueError("The agent returned an invalid stream event: missing result or error.")
+    raise RuntimeError(
+        "The agent connection ended before a final result arrived. "
+        "The task may still be running; use the same session ID to check its files."
+    )
+
+
 def invoke_agent(
     runtime_arn: str,
     payload: dict,
@@ -75,7 +99,10 @@ def invoke_agent(
     )
     stream = response["response"]
     try:
-        result = json.loads(stream.read())
+        if "text/event-stream" in response.get("contentType", ""):
+            result = read_streamed_result(stream)
+        else:
+            result = json.loads(stream.read())
     finally:
         stream.close()
     if not isinstance(result, dict):

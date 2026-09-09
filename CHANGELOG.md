@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Kept long prompt requests connected with streamed heartbeats, including during silent shell commands.
+- Updated the CLI to read streamed answers and detect incomplete responses without retrying agent work.
+
 ### Added
 
 - General cloud agent workspace with shell, file reading, file writing, and directory listing tools.
