@@ -11,6 +11,8 @@ from unittest.mock import Mock
 from uuid import UUID
 
 import pytest
+from botocore.exceptions import ResponseStreamingError
+from botocore.response import StreamingBody
 
 SPEC = importlib.util.spec_from_file_location(
     "invoke", Path(__file__).resolve().parent.parent / "scripts" / "invoke.py"
@@ -54,6 +56,101 @@ def test_invocation_preserves_workspace_and_does_not_retry(monkeypatch, capsys):
         runtimeSessionId=SESSION_ID,
         payload=json.dumps(payload).encode(),
     )
+
+
+def test_stream_reports_work_before_final_result_and_ignores_heartbeats(monkeypatch, capsys):
+    _, _, client = mock_aws(monkeypatch)
+    final = {"session_id": SESSION_ID, "workspace": "/workspace", "result": "Done"}
+    stream = Mock()
+
+    def lines(chunk_size):
+        yield b': keep alive'
+        yield b'data: {"type": "heartbeat"}'
+        assert "Agent is working..." in capsys.readouterr().err
+        yield b''
+        yield b'data: {"type": "heartbeat"}'
+        assert capsys.readouterr().err == ""
+        yield b'data: ' + json.dumps(final).encode()
+        pytest.fail("The caller should finish after receiving the final result")
+
+    stream.iter_lines.side_effect = lines
+    client.invoke_agent_runtime.return_value = {
+        "contentType": "text/event-stream; charset=utf-8", "response": stream,
+    }
+    assert invoke.invoke_agent(ARN, {"prompt": "Build the tool"}, SESSION_ID) == final
+    stream.read.assert_not_called()
+    stream.close.assert_called_once()
+    client.invoke_agent_runtime.assert_called_once()
+
+
+def test_stream_handles_utf8_split_across_transport_reads(monkeypatch):
+    _, _, client = mock_aws(monkeypatch)
+    final = {"session_id": SESSION_ID, "result": "Résumé saved."}
+    body = (
+        'data: {"type": "heartbeat"}\r\n\r\n'
+        + 'data:' + json.dumps(final, ensure_ascii=False) + '\r\n\r\n'
+    ).encode("utf-8")
+    raw = io.BytesIO(body)
+    client.invoke_agent_runtime.return_value = {
+        "contentType": "text/event-stream", "response": StreamingBody(raw, len(body)),
+    }
+    assert invoke.invoke_agent(ARN, {"prompt": "Save a résumé"}, SESSION_ID) == final
+    assert raw.closed
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        (b'', "before a final result"),
+        (b'data: {"type": "heartbeat"}\n\n', "before a final result"),
+        (b'data: {}\n\n', "missing result or error"),
+        (b'data: []\n\n', "expected a JSON object"),
+        (b'data: {"result":\n\n', "Expecting value"),
+    ],
+)
+def test_incomplete_or_invalid_stream_fails_and_closes(monkeypatch, body, message):
+    _, _, client = mock_aws(monkeypatch)
+    raw = io.BytesIO(body)
+    client.invoke_agent_runtime.return_value = {
+        "contentType": "text/event-stream", "response": StreamingBody(raw, len(body)),
+    }
+    with pytest.raises((RuntimeError, ValueError), match=message):
+        invoke.invoke_agent(ARN, {"prompt": "Build the tool"}, SESSION_ID)
+    assert raw.closed
+    client.invoke_agent_runtime.assert_called_once()
+
+
+def test_streamed_agent_error_is_reported_without_success_output(monkeypatch, capsys):
+    _, _, client = mock_aws(monkeypatch)
+    body = b'data: {"type": "heartbeat"}\n\ndata: {"error": "Command failed"}\n\n'
+    raw = io.BytesIO(body)
+    client.invoke_agent_runtime.return_value = {
+        "contentType": "text/event-stream", "response": StreamingBody(raw, len(body)),
+    }
+    assert invoke.main(["--arn", ARN, "--session-id", SESSION_ID, "--prompt", "Run tests"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "ERROR: Command failed" in captured.err
+    assert raw.closed
+    client.invoke_agent_runtime.assert_called_once()
+
+
+def test_stream_connection_failure_is_not_retried(monkeypatch):
+    _, _, client = mock_aws(monkeypatch)
+    stream = Mock()
+
+    def lines(chunk_size):
+        yield b'data: {"type": "heartbeat"}'
+        raise ResponseStreamingError(error="connection reset")
+
+    stream.iter_lines.side_effect = lines
+    client.invoke_agent_runtime.return_value = {
+        "contentType": "text/event-stream", "response": stream,
+    }
+    with pytest.raises(ResponseStreamingError, match="connection reset"):
+        invoke.invoke_agent(ARN, {"prompt": "Build the tool"}, SESSION_ID)
+    stream.close.assert_called_once()
+    client.invoke_agent_runtime.assert_called_once()
 
 
 @pytest.mark.parametrize(

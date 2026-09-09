@@ -74,6 +74,8 @@ uv run --project agents python scripts/invoke.py \
 
 Omitting `--session-id` for a prompt creates a new session. File operations require an existing session ID and do not invoke the model. `--list-files path/to/directory` lists a subdirectory; `--json` returns the full response. Downloads accept UTF-8 text files up to 1 MiB and never overwrite an existing local file.
 
+Prompt requests stream a heartbeat every 10 seconds while the agent works, then return the final answer. This keeps long tool calls from leaving the connection silent. The CLI prints a working status and waits for that final answer. If a connection still drops, the task may continue running: use the saved session ID to list or download files once it finishes. The CLI never automatically retries a task.
+
 ## How sessions work
 
 AgentCore provides an isolated runtime session and mounts managed session storage at `/mnt/workspace`. The application uses `WORKSPACE_DIR/<sha256-of-session-id>/` for working files and stores Strands conversation history in its `.conversation/` directory. Hashing keeps even maximum-length session IDs within filesystem limits. There is no AgentCore Memory resource or separate database.
@@ -105,13 +107,15 @@ AWS_PROFILE=your-profile AWS_REGION=eu-west-1 \
 In another terminal, invoke it with a session header:
 
 ```bash
-curl http://localhost:8080/invocations \
+curl -N http://localhost:8080/invocations \
   -H 'Content-Type: application/json' \
   -H 'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id: 12345678-1234-1234-1234-123456789012' \
   -d '{"prompt":"Write hello.py, run it, and save the output in hello.txt."}'
 ```
 
 Reuse that header for follow-ups. The API also accepts `{"action":"list_files","path":"."}` and `{"action":"read_file","path":"hello.txt"}` for direct file retrieval. Without a header, local requests share the `local` session.
+
+Prompt responses use `text/event-stream`: each `data:` event contains a JSON object, either `{"type":"heartbeat","session_id":"..."}` or the final `{"session_id":"...","workspace":"...","result":...}`. Errors contain an `error` field. Direct file responses use `application/json`. Custom clients must consume the stream until the final result or error; a heartbeat is not a completed task.
 
 Run the tests and Terraform checks without AWS credentials:
 

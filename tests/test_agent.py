@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import shlex
 import sys
+from threading import Event
 import time
 from types import SimpleNamespace
 
@@ -129,8 +130,8 @@ def test_prompt_uses_context_session_and_recreates_agent(tmp_path, monkeypatch):
 
     monkeypatch.setattr(main, "create_agent", fake_agent)
     for prompt in ("start", "continue"):
-        result = main.invoke({"prompt": prompt, "session_id": "untrusted"},
-                             SimpleNamespace(session_id="trusted"))
+        result = list(main.invoke({"prompt": prompt, "session_id": "untrusted"},
+                                  SimpleNamespace(session_id="trusted")))[-1]
         assert result["session_id"] == "trusted"
     storage_id = sha256(b"trusted").hexdigest()
     assert roots == [(tmp_path / storage_id, storage_id)] * 2
@@ -155,7 +156,7 @@ def test_long_session_id_restores_file_history(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "BedrockModel", lambda **kwargs: OfflineModel())
     session_id = "s" * 256
     for prompt in ("Remember blue", "Continue"):
-        result = main.invoke({"prompt": prompt}, SimpleNamespace(session_id=session_id))
+        result = list(main.invoke({"prompt": prompt}, SimpleNamespace(session_id=session_id)))[-1]
         assert result["session_id"] == session_id
         assert result["result"]["content"] == [{"text": "Saved."}]
 
@@ -170,3 +171,57 @@ def test_busy_workspace_rejects_concurrent_request():
     with main.invocation_lock:
         result = main.invoke({"prompt": "hello"}, SimpleNamespace(session_id="local"))
     assert "busy" in result["error"]
+
+
+def test_prompt_sends_heartbeats_during_a_silent_tool_call(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "HEARTBEAT_SECONDS", 0.01, raising=False)
+    finish = Event()
+
+    def agent(prompt):
+        assert finish.wait(5), "test did not release the agent"
+        return SimpleNamespace(message={"content": [{"text": "DONE"}]})
+
+    monkeypatch.setattr(main, "create_agent", lambda *args: agent)
+    events = main.invoke({"prompt": "work"}, SimpleNamespace(session_id="local"))
+    try:
+        assert next(events)["type"] == "heartbeat"
+        assert next(events)["type"] == "heartbeat"
+    finally:
+        finish.set()
+    assert list(events)[-1]["result"]["content"] == [{"text": "DONE"}]
+
+
+def test_disconnected_stream_keeps_workspace_locked_until_work_finishes(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_DIR", str(tmp_path))
+    finish = Event()
+
+    def agent(prompt):
+        assert finish.wait(5), "test did not release the agent"
+        return SimpleNamespace(message={"content": [{"text": "DONE"}]})
+
+    monkeypatch.setattr(main, "create_agent", lambda *args: agent)
+    context = SimpleNamespace(session_id="local")
+    events = main.invoke({"prompt": "work"}, context)
+    try:
+        next(events)
+        events.close()
+        assert "busy" in main.invoke({"action": "list_files"}, context)["error"]
+    finally:
+        finish.set()
+    assert main.invocation_lock.acquire(timeout=5), "worker did not release the workspace"
+    main.invocation_lock.release()
+    assert "files" in main.invoke({"action": "list_files"}, context)
+
+
+def test_prompt_failure_is_streamed_and_releases_workspace(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_DIR", str(tmp_path))
+
+    def fail(*args):
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(main, "create_agent", fail)
+    context = SimpleNamespace(session_id="local")
+    events = list(main.invoke({"prompt": "work"}, context))
+    assert events[-1] == {"error": "model unavailable", "session_id": "local"}
+    assert "files" in main.invoke({"action": "list_files"}, context)

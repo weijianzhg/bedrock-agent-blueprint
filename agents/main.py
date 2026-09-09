@@ -1,10 +1,13 @@
 """A general agent with a Linux workspace and file-backed conversation history."""
 
 from hashlib import sha256
+from contextvars import copy_context
 import os
 from pathlib import Path
+from queue import Empty, Queue
 import re
-from threading import Lock
+from threading import Lock, Thread
+from typing import Iterator
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp, RequestContext
 from strands import Agent
@@ -18,6 +21,7 @@ app = BedrockAgentCoreApp()
 # One writer at a time keeps commands and conversation updates in order.
 invocation_lock = Lock()
 DEFAULT_MODEL = "eu.anthropic.claude-sonnet-5"
+HEARTBEAT_SECONDS = 10
 
 SYSTEM_PROMPT = """You are a general cloud agent working in a Linux workspace.
 Complete the user's task using files and commands. Inspect existing work first,
@@ -56,8 +60,48 @@ def create_agent(workspace: Workspace, storage_id: str) -> Agent:
     )
 
 
+def prompt_events(workspace: Workspace, storage_id: str, session_id: str,
+                  prompt: str) -> Iterator[dict]:
+    """Keep the HTTP stream alive even while a tool produces no output."""
+    # Generators start after invoke() returns and releases its request lock.
+    if not invocation_lock.acquire(blocking=False):
+        yield {"error": "workspace is busy; retry after the current request finishes",
+               "session_id": session_id}
+        return
+    completed = Queue(maxsize=1)
+
+    def run():
+        try:
+            result = create_agent(workspace, storage_id)(prompt)
+            response = {"session_id": session_id, "workspace": str(workspace.root),
+                        "result": result.message}
+        except Exception as exc:
+            app.logger.exception("Agent task failed")
+            response = {"error": str(exc), "session_id": session_id}
+        finally:
+            # The worker owns the lock, even if the caller closes the stream.
+            invocation_lock.release()
+        completed.put(response)
+
+    worker = Thread(target=copy_context().run, args=(run,), daemon=True)
+    try:
+        worker.start()
+    except Exception:
+        invocation_lock.release()
+        raise
+    yield {"type": "heartbeat", "session_id": session_id}
+    while True:
+        try:
+            response = completed.get(timeout=HEARTBEAT_SECONDS)
+        except Empty:
+            yield {"type": "heartbeat", "session_id": session_id}
+        else:
+            yield response
+            return
+
+
 @app.entrypoint
-def invoke(payload: dict, context: RequestContext) -> dict:
+def invoke(payload: dict, context: RequestContext) -> dict | Iterator[dict]:
     """Run a prompt, or retrieve files directly without asking the model."""
     session_id = context.session_id or "local"
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,256}", session_id):
@@ -90,12 +134,7 @@ def invoke(payload: dict, context: RequestContext) -> dict:
         prompt = payload.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
-        result = create_agent(workspace, storage_id)(prompt)
-        return {
-            "session_id": session_id,
-            "workspace": str(workspace.root),
-            "result": result.message,
-        }
+        return prompt_events(workspace, storage_id, session_id, prompt)
     except (ValueError, OSError) as exc:
         return {"error": str(exc), "session_id": session_id}
     finally:
