@@ -12,6 +12,12 @@ container_tag = "latest"
 model_id      = "eu.anthropic.claude-sonnet-5"
 log_level     = "INFO"
 
+# Terraform creates an application inference profile from model_id and passes
+# its ARN to the runtime. Project, Environment, and Agent tags are automatic.
+inference_profile_tags = {
+  CostCenter = "engineering"
+}
+
 # Optional GitHub Actions OIDC deploy role.
 # Set github_actions_oidc_enabled = true after replacing github_repository.
 github_actions_oidc_enabled = false

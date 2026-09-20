@@ -22,6 +22,22 @@ def workspace(tmp_path):
     return Workspace(tmp_path / "work")
 
 
+def test_application_profile_arn_reaches_bedrock_model(workspace, monkeypatch):
+    profile = "arn:aws:bedrock:eu-west-1:123456789012:application-inference-profile/test"
+    monkeypatch.setenv("MODEL_ID", profile)
+    monkeypatch.setenv("AWS_REGION", "eu-west-1")
+    captured = {}
+
+    def model(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(main, "BedrockModel", model)
+    monkeypatch.setattr(main, "Agent", lambda **kwargs: kwargs)
+    main.create_agent(workspace, "test")
+    assert captured == {"model_id": profile, "region_name": "eu-west-1"}
+
+
 def test_write_read_and_list_nested_files(workspace):
     workspace.write_file("reports/result.md", "# Result\n42\n")
     assert workspace.read_file("reports/result.md") == "# Result\n42\n"

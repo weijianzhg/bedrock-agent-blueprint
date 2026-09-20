@@ -22,3 +22,8 @@ output "ci_deploy_role_arn" {
   description = "IAM role ARN for GitHub Actions OIDC deployments, when enabled"
   value       = var.github_actions_oidc_enabled ? aws_iam_role.ci_deploy[0].arn : null
 }
+
+output "inference_profile_arn" {
+  description = "Application inference profile ARN used as MODEL_ID, including for local cost-attributed invocations"
+  value       = aws_bedrock_inference_profile.agent.arn
+}
