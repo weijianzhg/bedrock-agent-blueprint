@@ -44,6 +44,27 @@ run "cross_region_cost_allocation" {
     condition     = aws_bedrock_inference_profile.agent.tags["Project"] == var.project_name && aws_bedrock_inference_profile.agent.tags["Environment"] == var.environment && aws_bedrock_inference_profile.agent.tags["Agent"] == var.agent_name && aws_bedrock_inference_profile.agent.tags["CostCenter"] == "engineering"
     error_message = "Allocation tags must include fixed deployment identity and custom tags."
   }
+  assert {
+    condition = alltrue([
+      for statement in data.aws_iam_policy_document.bedrock_invoke.statement : (
+        toset(statement.resources) == toset([aws_bedrock_inference_profile.agent.arn]) || (
+          length(statement.condition) == 1 && alltrue([
+            for condition in statement.condition : condition.test == "StringEquals" && condition.variable == "bedrock:InferenceProfileArn" && toset(condition.values) == toset([aws_bedrock_inference_profile.agent.arn])
+          ])
+        )
+      ) if contains(statement.actions, "bedrock:InvokeModel") || contains(statement.actions, "bedrock:InvokeModelWithResponseStream")
+    ])
+    error_message = "Backing-model invocation must require the managed application profile, preventing unallocated direct calls."
+  }
+  assert {
+    condition = alltrue([
+      for model in aws_bedrock_inference_profile.agent.models : contains(
+        one([for statement in data.aws_iam_policy_document.bedrock_invoke.statement : statement.resources if statement.sid == "InvokeProfileModels"]),
+        model.model_arn,
+      )
+    ])
+    error_message = "Runtime IAM must allow every backing model in the application profile."
+  }
 }
 
 run "foundation_model_id" {
@@ -95,4 +116,22 @@ run "reject_application_profile_source" {
   command = plan
   variables { model_id = "arn:aws:bedrock:eu-west-1:123456789012:application-inference-profile/existing" }
   expect_failures = [var.model_id]
+}
+
+run "long_agent_name_has_valid_profile_name" {
+  command = plan
+  variables { agent_name = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuv" }
+  assert {
+    condition     = length(aws_bedrock_inference_profile.agent.name) <= 64 && can(regex("^([0-9a-zA-Z][ _-]?)+$", aws_bedrock_inference_profile.agent.name))
+    error_message = "A supported 48-character agent name must produce a valid Bedrock profile name."
+  }
+}
+
+run "repeated_underscores_have_valid_profile_name" {
+  command = plan
+  variables { agent_name = "agent__workspace_" }
+  assert {
+    condition     = can(regex("^([0-9a-zA-Z][ _-]?)+$", aws_bedrock_inference_profile.agent.name))
+    error_message = "AgentCore allows repeated underscores but Bedrock profile names do not."
+  }
 }

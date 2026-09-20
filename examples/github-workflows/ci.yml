@@ -50,7 +50,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Check formatting
-        run: terraform -chdir=infra fmt -check -recursive
+        run: terraform fmt -check -recursive
 
       - name: Initialize without backend
         run: terraform -chdir=infra init -backend=false -input=false
@@ -60,3 +60,8 @@ jobs:
 
       - name: Test inference profile configuration
         run: terraform -chdir=infra test
+
+      - name: Validate billing tag example
+        run: |
+          terraform -chdir=examples/cost-allocation init -backend=false -input=false
+          terraform -chdir=examples/cost-allocation validate

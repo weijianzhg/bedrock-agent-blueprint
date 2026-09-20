@@ -3,6 +3,17 @@
 data "aws_partition" "current" {}
 
 locals {
+  # Bedrock permits at most 64 characters and single separators. AgentCore
+  # permits longer combined names and repeated underscores. Preserve readable
+  # names when valid; otherwise sanitize and hash the full identity to avoid
+  # collisions caused by truncation or separator normalization.
+  inference_profile_full_name = "${local.name_prefix}-${var.agent_name}"
+  inference_profile_name = (
+    length(local.inference_profile_full_name) <= 64 && can(regex("^([0-9a-zA-Z][ _-]?)+$", local.inference_profile_full_name))
+    ? local.inference_profile_full_name
+    : "${trim(substr(replace(local.inference_profile_full_name, "/[^0-9A-Za-z]+/", "-"), 0, 51), "-")}-${substr(sha256(local.inference_profile_full_name), 0, 12)}"
+  )
+
   source_is_profile = can(regex("^(us|eu|apac|global)\\.", var.model_id)) || can(regex(":inference-profile/", var.model_id))
   model_source_arn = startswith(var.model_id, "arn:") ? var.model_id : (
     local.source_is_profile
@@ -17,7 +28,7 @@ data "aws_bedrock_inference_profile" "source" {
 }
 
 resource "aws_bedrock_inference_profile" "agent" {
-  name        = "${local.name_prefix}-${var.agent_name}"
+  name        = local.inference_profile_name
   description = "Bedrock model cost allocation for this agent deployment"
 
   model_source {

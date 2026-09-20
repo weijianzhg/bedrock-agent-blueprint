@@ -120,8 +120,9 @@ File read/write tools accept UTF-8 files up to 1 MiB. Listings omit hidden files
 The same agent can run locally with Amazon Bedrock and your AWS credentials. Use the Terraform profile output to attribute local model usage to the same deployment. If you have no infrastructure, omit `MODEL_ID` to use the default source model without application-profile cost allocation. Choose a local directory for the workspace:
 
 ```bash
-AWS_PROFILE=your-profile AWS_REGION=eu-west-1 \
-  MODEL_ID="$(terraform -chdir=infra output -raw inference_profile_arn)" \
+export AWS_PROFILE=your-profile
+export AWS_REGION=eu-west-1
+MODEL_ID="$(terraform -chdir=infra output -raw inference_profile_arn)" \
   WORKSPACE_DIR="$PWD/workspace" \
   uv run --project agents python agents/main.py
 ```
