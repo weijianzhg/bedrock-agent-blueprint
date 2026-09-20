@@ -57,3 +57,6 @@ jobs:
 
       - name: Validate
         run: terraform -chdir=infra validate
+
+      - name: Test inference profile configuration
+        run: terraform -chdir=infra test

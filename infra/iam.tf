@@ -47,20 +47,44 @@ resource "aws_iam_role_policy" "ecr_pull" {
 }
 
 # --------------------------------------------------------------------------
-# Bedrock Model Invocation — allow the agent to call foundation models
+# Bedrock Model Invocation — attribute all model calls to the application profile
 # --------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "bedrock_invoke" {
   statement {
+    sid    = "InvokeApplicationProfile"
     effect = "Allow"
     actions = [
       "bedrock:InvokeModel",
       "bedrock:InvokeModelWithResponseStream",
     ]
-    resources = [
-      "arn:aws:bedrock:*::foundation-model/*",
-      "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+    resources = [aws_bedrock_inference_profile.agent.arn]
+  }
+
+  statement {
+    sid    = "InvokeProfileModels"
+    effect = "Allow"
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:InvokeModelWithResponseStream",
     ]
+    resources = concat(
+      [for model in aws_bedrock_inference_profile.agent.models : model.model_arn],
+      local.source_is_profile ? [local.model_source_arn] : [],
+    )
+
+    condition {
+      test     = "StringEquals"
+      variable = "bedrock:InferenceProfileArn"
+      values   = [aws_bedrock_inference_profile.agent.arn]
+    }
+  }
+
+  statement {
+    sid       = "ReadApplicationProfile"
+    effect    = "Allow"
+    actions   = ["bedrock:GetInferenceProfile"]
+    resources = [aws_bedrock_inference_profile.agent.arn]
   }
 }
 

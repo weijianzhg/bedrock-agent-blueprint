@@ -2,13 +2,14 @@
 
 A small starting point for a general agent with its own remote Linux workspace. Give it a task, let it use files and commands, then reconnect to continue the work. Build on the template by changing the tools, instructions, model, or container image.
 
-[Strands Agents](https://strandsagents.com/) runs the agent loop inside [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html). Terraform provisions the runtime, ECR repository, and execution role in your AWS account.
+[Strands Agents](https://strandsagents.com/) runs the agent loop inside [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html). Terraform provisions the runtime, ECR repository, execution role, and a tagged Bedrock application inference profile in your AWS account.
 
 ```mermaid
 flowchart LR
     CLI[CLI or your application] --> Runtime[AgentCore session]
     Runtime --> Agent[Strands agent]
-    Agent --> Model[Bedrock model]
+    Agent --> Profile[Application inference profile]
+    Profile --> Model[Bedrock model]
     Agent --> Tools[Shell and file tools]
     Tools --> Workspace[Session workspace]
     Agent --> History[Conversation files]
@@ -47,6 +48,26 @@ Use the same AWS region in your profile, environment, and Terraform configuratio
 The build script initializes Terraform, provisions the ECR repository, builds the ARM64 image, and pushes a versioned tag plus `latest`. The default tag combines the Git SHA and build time; use `IMAGE_TAG` to supply your own. The final Terraform apply creates the runtime. For later changes, build again and apply with the new image tag.
 
 When upgrading an existing checkout, run `terraform -chdir=infra init -upgrade` once to update the locked AWS provider before building. Remove obsolete `agent_memory_*` and `network_mode` settings from your `.tfvars` file. The next full apply removes any previously managed AgentCore Memory resources.
+
+## Model cost allocation
+
+Terraform creates an [application inference profile](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles.html) per deployment and sets the runtime's `MODEL_ID` to its ARN. `model_id` remains the source selector: use a foundation model ID/ARN or a system cross-region inference profile ID/ARN. IDs beginning with `us.`, `eu.`, `apac.`, or `global.` select cross-region profiles; use an explicit ARN for other system profile formats. An existing application profile is not a supported copy source.
+
+The profile is tagged with `Project`, `Environment`, and `Agent`. Set `inference_profile_tags` to add billing dimensions such as `CostCenter` or `Team`. Runtime IAM allows the profile and its backing model ARNs, including all cross-region destinations, and conditions backing-model access on the application profile. Calls using the source model directly are not permitted by this policy.
+
+For an existing deployment, apply using its existing Terraform state and current `container_tag`. Terraform creates the profile and updates the runtime environment and IAM; no container rebuild is needed for this change. Updating the runtime version resets managed session storage, so download any files you need first. Bootstrap an existing CI deploy role with a local apply before CI manages profiles, because its old policy lacks profile-management permissions. Changing the source model also requires a local apply to update the deploy role's source-specific permissions.
+
+Tags must also be activated for billing. AWS can take up to 24 hours to discover new tag keys before activation, followed by billing-report propagation. [AWS documents this separate activation step](https://docs.aws.amazon.com/bedrock/latest/userguide/cost-mgmt-application-inference-profiles.html). This repository provides a separate Terraform root so agent deletion cannot deactivate account-wide billing tags:
+
+```bash
+# Run after the tagged profile exists and the keys appear in Billing.
+# Use the standalone account or Organizations management account's billing profile.
+AWS_PROFILE=your-billing-profile terraform -chdir=examples/cost-allocation init
+AWS_PROFILE=your-billing-profile terraform -chdir=examples/cost-allocation apply \
+  -var='tag_keys=["Project","Environment","Agent","CostCenter"]'
+```
+
+Maintain one state for these account-wide settings, with a remote backend for shared use. If a key is already managed elsewhere, leave it there and omit it from `tag_keys`. To adopt an existing key, import it before applying, for example `terraform -chdir=examples/cost-allocation import 'aws_ce_cost_allocation_tag.agent["Project"]' Project`. The example uses `prevent_destroy` to protect billing tags from accidental deactivation. Once billing data arrives, group or filter Amazon Bedrock costs by the activated tags in Cost Explorer. Historical untagged calls are not retroactively routed through this profile.
 
 ## Give the agent a task
 
@@ -96,10 +117,11 @@ File read/write tools accept UTF-8 files up to 1 MiB. Listings omit hidden files
 
 ## Run locally
 
-The same agent can run without deploying infrastructure. Model requests still use Amazon Bedrock and your AWS credentials. Choose a local directory for the workspace:
+The same agent can run locally with Amazon Bedrock and your AWS credentials. Use the Terraform profile output to attribute local model usage to the same deployment. If you have no infrastructure, omit `MODEL_ID` to use the default source model without application-profile cost allocation. Choose a local directory for the workspace:
 
 ```bash
 AWS_PROFILE=your-profile AWS_REGION=eu-west-1 \
+  MODEL_ID="$(terraform -chdir=infra output -raw inference_profile_arn)" \
   WORKSPACE_DIR="$PWD/workspace" \
   uv run --project agents python agents/main.py
 ```
@@ -124,6 +146,7 @@ uv run --project agents pytest tests/ -v
 terraform -chdir=infra fmt -check
 terraform -chdir=infra init -backend=false
 terraform -chdir=infra validate
+terraform -chdir=infra test # Terraform 1.7+ for mock-provider tests
 ```
 
 ## Make it yours
@@ -135,6 +158,7 @@ terraform -chdir=infra validate
 | [agents/Dockerfile](agents/Dockerfile) | Programs available in the remote computer |
 | [scripts/invoke.py](scripts/invoke.py) | CLI or an example for your own application |
 | [infra/agent.tf](infra/agent.tf) | Runtime settings, storage, and environment variables |
+| [infra/bedrock.tf](infra/bedrock.tf) | Application inference profile and cost allocation tags |
 | [infra/iam.tf](infra/iam.tf) | The runtime's AWS permissions |
 
 To add a tool, add a method with the Strands `@tool` decorator to `Workspace` and register it in `create_agent()` in `agents/main.py`. Keep its docstring clear: the model uses it to understand when and how to call the tool.
@@ -161,7 +185,7 @@ Download any files you want to keep, then run:
 terraform -chdir=infra destroy
 ```
 
-This removes the runtime, its session storage, Terraform-managed roles, and the ECR repository. In non-production environments it also deletes stored images. With `environment = "prod"`, empty the ECR repository before destroying it. Separately managed resources such as your Terraform state bucket remain.
+This removes the runtime, its session storage, application inference profile, Terraform-managed roles, and the ECR repository. Account-wide billing tags in the separate cost-allocation state remain active. In non-production environments it also deletes stored images. With `environment = "prod"`, empty the ECR repository before destroying it. Separately managed resources such as your Terraform state bucket remain.
 
 ## License
 

@@ -49,9 +49,20 @@ variable "container_tag" {
 }
 
 variable "model_id" {
-  description = "Bedrock model or inference profile ID available in the deployment region"
+  description = "Source foundation model or system cross-region inference profile (ID or ARN) for the managed application inference profile"
   type        = string
   default     = "eu.anthropic.claude-sonnet-5"
+
+  validation {
+    condition     = trimspace(var.model_id) != "" && !can(regex(":application-inference-profile/", var.model_id))
+    error_message = "model_id must select a foundation model or system inference profile, not an application inference profile."
+  }
+}
+
+variable "inference_profile_tags" {
+  description = "Additional cost allocation tags, such as CostCenter or Team. Project, Environment, and Agent are set by Terraform."
+  type        = map(string)
+  default     = {}
 }
 
 variable "log_level" {

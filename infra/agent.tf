@@ -27,7 +27,7 @@ resource "aws_bedrockagentcore_agent_runtime" "this" {
 
   environment_variables = {
     WORKSPACE_DIR = "/mnt/workspace"
-    MODEL_ID      = var.model_id
+    MODEL_ID      = aws_bedrock_inference_profile.agent.arn
     LOG_LEVEL     = var.log_level
   }
 
