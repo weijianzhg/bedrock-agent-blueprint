@@ -91,9 +91,11 @@ jobs:
             -target=aws_ecr_repository.agent \
             -target=aws_ecr_lifecycle_policy.agent
 
-      - name: Resolve ECR repository URL
+      - name: Resolve ECR repository URL and image source
         id: ecr
-        run: echo "repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+          echo "source_dir=$(terraform -chdir=infra output -raw source_dir)" >> "$GITHUB_OUTPUT"
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -101,8 +103,8 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v7
         with:
-          context: ${{ env.TF_VAR_runtime_type == 'mcp' && 'mcp_server' || 'agents' }}
-          file: ${{ env.TF_VAR_runtime_type == 'mcp' && 'mcp_server' || 'agents' }}/Dockerfile
+          context: ${{ steps.ecr.outputs.source_dir }}
+          file: ${{ steps.ecr.outputs.source_dir }}/Dockerfile
           platforms: linux/arm64
           provenance: false
           push: true

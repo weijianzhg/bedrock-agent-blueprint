@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the runtime's Docker image (ARM64) and push it to ECR.
 #
-# Terraform's runtime_type selects the source: agents/ or mcp_server/.
+# Terraform's runtime_type selects the source directory: agents/ or mcp_server/.
 #
 # Usage:
 #   AWS_PROFILE=my-profile ./scripts/build_and_push.sh
@@ -43,12 +43,7 @@ terraform -chdir="$INFRA_DIR" apply -input=false -auto-approve \
   -target=aws_ecr_lifecycle_policy.agent
 ECR_URL="$(terraform -chdir="$INFRA_DIR" output -raw ecr_repository_url)"
 # Build what Terraform will deploy, so the image and runtime protocol match.
-RUNTIME_TYPE="$(terraform -chdir="$INFRA_DIR" output -raw runtime_type)"
-case "$RUNTIME_TYPE" in
-  agent) SOURCE_DIR="${ROOT_DIR}/agents" ;;
-  mcp) SOURCE_DIR="${ROOT_DIR}/mcp_server" ;;
-  *) echo "Terraform returned an unknown runtime_type: $RUNTIME_TYPE" >&2; exit 1 ;;
-esac
+SOURCE_DIR="${ROOT_DIR}/$(terraform -chdir="$INFRA_DIR" output -raw source_dir)"
 ECR_REGISTRY="${ECR_URL%%/*}"
 if [[ ! "$ECR_REGISTRY" =~ ^[0-9]+\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com(\.cn)?$ ]]; then
   echo "Terraform returned an invalid ECR URL: $ECR_URL" >&2
@@ -61,7 +56,7 @@ IMAGE_URI="${ECR_URL}:${TAG}"
 aws ecr get-login-password --region "$DEPLOY_REGION" \
   | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
-echo "Building and pushing ARM64 ${RUNTIME_TYPE} image: $IMAGE_URI"
+echo "Building and pushing ARM64 image from ${SOURCE_DIR}: $IMAGE_URI"
 docker buildx build \
   --platform linux/arm64 \
   --provenance=false \

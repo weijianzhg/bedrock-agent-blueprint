@@ -4,7 +4,6 @@ Add a tool by writing a typed function with the @mcp.tool() decorator. Clients
 see its docstring and type hints, so keep them clear.
 """
 
-from datetime import datetime, timezone
 import os
 
 from mcp.server.mcpserver import MCPServer
@@ -24,12 +23,6 @@ def text_stats(text: str) -> dict:
         "words": len(text.split()),
         "lines": len(text.splitlines()),
     }
-
-
-@mcp.tool()
-def utc_now() -> str:
-    """Return the current UTC time as an ISO 8601 timestamp."""
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 if __name__ == "__main__":

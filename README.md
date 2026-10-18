@@ -164,7 +164,7 @@ flowchart LR
     Server --> Tools[Your tools]
 ```
 
-The build script and deployment steps are the same: `build_and_push.sh` reads `runtime_type` from Terraform and builds the matching directory. The runtime uses AgentCore's `MCP` server protocol with stateless streamable HTTP. It has no model, inference profile, Bedrock permissions, or session storage, so `model_id` and `inference_profile_tags` are unused. Switching an existing deployment between `agent` and `mcp` updates the runtime and discards its session storage, so download any agent files first.
+The build script and deployment steps are the same: `build_and_push.sh` asks Terraform which directory to build. The runtime uses AgentCore's `MCP` server protocol with stateless streamable HTTP. It has no model, inference profile, Bedrock permissions, or session storage, so `model_id` and `inference_profile_tags` are unused. Switching an existing deployment between `agent` and `mcp` updates the runtime and discards its session storage, so download any agent files first.
 
 List and call tools with your AWS credentials:
 

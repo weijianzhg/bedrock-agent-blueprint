@@ -28,9 +28,9 @@ output "inference_profile_arn" {
   value       = one(aws_bedrock_inference_profile.agent[*].arn)
 }
 
-output "runtime_type" {
-  description = "What the runtime serves (agent or mcp) — used by build_and_push.sh to pick the image source"
-  value       = var.runtime_type
+output "source_dir" {
+  description = "Repository directory the image is built from — used by build_and_push.sh and CI"
+  value       = local.is_agent ? "agents" : "mcp_server"
   # Targeted applies only refresh outputs that depend on a targeted resource;
   # the build script reads this after applying just the ECR repository.
   depends_on = [aws_ecr_repository.agent]

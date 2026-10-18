@@ -1,5 +1,6 @@
 """MCP client request signing and CLI handling; AWS access is mocked."""
 
+import json
 from pathlib import Path
 import sys
 
@@ -59,7 +60,7 @@ def test_results_use_mcp_wire_names():
     assert anyio.run(real_result, "text_stats", {"text": "hi"})["isError"] is False
 
 
-def test_cli_prints_tool_text_and_fails_on_tool_errors(monkeypatch, capsys):
+def test_cli_prints_the_result_and_fails_on_tool_errors(monkeypatch, capsys):
     monkeypatch.setattr(mcp_client, "runtime_endpoint", lambda arn, profile: ("url", None))
     calls = []
 
@@ -70,7 +71,7 @@ def test_cli_prints_tool_text_and_fails_on_tool_errors(monkeypatch, capsys):
     monkeypatch.setattr(mcp_client, "run", run)
     assert mcp_client.main(["--arn", ARN, "--call", "text_stats", "--args", "{}"]) == 1
     assert calls == [("text_stats", {})]
-    assert "text" in capsys.readouterr().out
+    assert json.loads(capsys.readouterr().out)["isError"] is True
 
 
 def test_http_failures_are_reported_without_a_traceback(monkeypatch, capsys):

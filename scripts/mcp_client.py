@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """List or call the tools of an MCP server deployed on AgentCore Runtime.
 
+Results are printed as MCP JSON.
+
 Requests are signed with your AWS credentials (SigV4), the same IAM
 authentication invoke.py uses. If --arn is omitted, the runtime ARN is read
 from this repository's Terraform.
@@ -88,7 +90,6 @@ def main(argv: list[str] | None = None) -> int:
     action.add_argument("--list-tools", action="store_true", help="List the server's tools")
     action.add_argument("--call", metavar="TOOL", help="Call a tool by name")
     parser.add_argument("--args", default="{}", help='Tool arguments as JSON, for example \'{"text": "hi"}\'')
-    parser.add_argument("--json", action="store_true", help="Print the raw MCP result")
     args = parser.parse_args(argv)
 
     try:
@@ -103,15 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {root_cause(exc)}", file=sys.stderr)
         return 1
 
-    if args.json:
-        print(json.dumps(result, indent=2))
-    elif args.list_tools:
-        for tool in result["tools"]:
-            summary = (tool.get("description") or "").strip().splitlines()[:1]
-            print(f"{tool['name']}: {summary[0] if summary else ''}")
-    else:
-        for block in result.get("content", []):
-            print(block["text"] if block.get("type") == "text" else json.dumps(block))
+    print(json.dumps(result, indent=2))
     return 1 if result.get("isError") else 0
 
 
