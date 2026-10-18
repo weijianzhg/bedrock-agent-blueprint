@@ -7,6 +7,9 @@ project_name = "bedrock-agent-blueprint"
 environment  = "dev"
 
 # Cloud agent workspace settings
+# runtime_type = "mcp" deploys the MCP server in mcp_server/ instead of the agent;
+# model_id and inference_profile_tags are then unused.
+runtime_type  = "agent"
 agent_name    = "bedrock_agent_blueprint"
 container_tag = "latest"
 model_id      = "eu.anthropic.claude-sonnet-5"

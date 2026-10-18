@@ -51,6 +51,8 @@ resource "aws_iam_role_policy" "ecr_pull" {
 # --------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "bedrock_invoke" {
+  count = local.is_agent ? 1 : 0
+
   statement {
     sid    = "InvokeApplicationProfile"
     effect = "Allow"
@@ -58,7 +60,7 @@ data "aws_iam_policy_document" "bedrock_invoke" {
       "bedrock:InvokeModel",
       "bedrock:InvokeModelWithResponseStream",
     ]
-    resources = [aws_bedrock_inference_profile.agent.arn]
+    resources = [aws_bedrock_inference_profile.agent[0].arn]
   }
 
   statement {
@@ -69,14 +71,14 @@ data "aws_iam_policy_document" "bedrock_invoke" {
       "bedrock:InvokeModelWithResponseStream",
     ]
     resources = concat(
-      [for model in aws_bedrock_inference_profile.agent.models : model.model_arn],
+      [for model in aws_bedrock_inference_profile.agent[0].models : model.model_arn],
       local.source_is_profile ? [local.model_source_arn] : [],
     )
 
     condition {
       test     = "StringEquals"
       variable = "bedrock:InferenceProfileArn"
-      values   = [aws_bedrock_inference_profile.agent.arn]
+      values   = [aws_bedrock_inference_profile.agent[0].arn]
     }
   }
 
@@ -84,14 +86,16 @@ data "aws_iam_policy_document" "bedrock_invoke" {
     sid       = "ReadApplicationProfile"
     effect    = "Allow"
     actions   = ["bedrock:GetInferenceProfile"]
-    resources = [aws_bedrock_inference_profile.agent.arn]
+    resources = [aws_bedrock_inference_profile.agent[0].arn]
   }
 }
 
 resource "aws_iam_role_policy" "bedrock_invoke" {
+  count = local.is_agent ? 1 : 0
+
   name   = "bedrock-invoke"
   role   = aws_iam_role.agentcore_runtime.id
-  policy = data.aws_iam_policy_document.bedrock_invoke.json
+  policy = data.aws_iam_policy_document.bedrock_invoke[0].json
 }
 
 # --------------------------------------------------------------------------

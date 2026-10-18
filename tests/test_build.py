@@ -23,7 +23,9 @@ if tool == "docker" and args == ["info"] and os.environ.get("BUILD_STUB_NO_DOCKE
 if tool == "terraform":
     if "apply" in args and os.environ.get("BUILD_STUB_APPLY_FAILURE"):
         sys.exit(7)
-    if "output" in args:
+    if "output" in args and "runtime_type" in args:
+        print(os.environ.get("BUILD_STUB_RUNTIME_TYPE", "agent"))
+    elif "output" in args:
         print("123456789012.dkr.ecr.us-east-2.amazonaws.com/example-dev")
 if tool == "aws":
     if args == ["configure", "get", "region"]:
@@ -105,4 +107,21 @@ def test_default_tag_includes_build_time_for_uncommitted_changes(run_build):
 def test_terraform_failure_prevents_login_and_push(run_build):
     result, calls = run_build(BUILD_STUB_APPLY_FAILURE="1")
     assert result.returncode == 7
+    assert not any("login" in call["args"] or "build" in call["args"] for call in calls)
+
+
+@pytest.mark.parametrize(("runtime_type", "source"), [("agent", "agents"), ("mcp", "mcp_server")])
+def test_builds_the_source_terraform_will_deploy(run_build, runtime_type, source):
+    result, calls = run_build(BUILD_STUB_RUNTIME_TYPE=runtime_type)
+    assert result.returncode == 0, result.stderr
+    build = next(call for call in calls if "build" in call["args"])
+    source_dir = str(BUILD_SCRIPT.parents[1] / source)
+    assert build["args"][-1] == source_dir
+    assert build["args"][build["args"].index("-f") + 1] == f"{source_dir}/Dockerfile"
+
+
+def test_unknown_runtime_type_stops_before_login(run_build):
+    result, calls = run_build(BUILD_STUB_RUNTIME_TYPE="other")
+    assert result.returncode == 1
+    assert "unknown runtime_type" in result.stderr
     assert not any("login" in call["args"] or "build" in call["args"] for call in calls)

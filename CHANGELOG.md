@@ -9,6 +9,8 @@
 
 ### Added
 
+- `runtime_type = "mcp"` deploys a small MCP server from `mcp_server/` on the same infrastructure, using AgentCore's MCP protocol without a model, inference profile, or session storage.
+- `scripts/mcp_client.py` lists and calls MCP tools on a deployed runtime with SigV4-signed requests.
 - General cloud agent workspace with shell, file reading, file writing, and directory listing tools.
 - Python, Bash, Git, Node.js, npm, and curl in the ARM64 runtime container.
 - Managed AgentCore session storage and file-backed Strands conversation history, resumed using the same session ID.
