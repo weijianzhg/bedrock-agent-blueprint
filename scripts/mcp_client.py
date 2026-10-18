@@ -16,7 +16,6 @@ import boto3
 import httpx2
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
-from botocore.exceptions import BotoCoreError, ClientError
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 
@@ -65,9 +64,20 @@ async def run(url: str, auth: AwsSigV4, tool: str | None, arguments: dict) -> di
         async with Client(streamable_http_client(url, http_client=http_client)) as client:
             if tool is None:
                 tools = (await client.list_tools()).tools
-                return {"tools": [tool.model_dump(mode="json", exclude_none=True) for tool in tools]}
-            result = await client.call_tool(tool, arguments)
-            return result.model_dump(mode="json", exclude_none=True)
+                return {"tools": [wire_format(tool) for tool in tools]}
+            return wire_format(await client.call_tool(tool, arguments))
+
+
+def wire_format(model) -> dict:
+    """Use MCP's camelCase field names, such as isError and inputSchema."""
+    return model.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+
+def root_cause(exc: BaseException) -> BaseException:
+    """Unwrap the task-group errors that the MCP client raises for HTTP failures."""
+    while getattr(exc, "exceptions", None):
+        exc = exc.exceptions[0]
+    return exc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -89,9 +99,8 @@ def main(argv: list[str] | None = None) -> int:
             args.arn or get_runtime_arn_from_terraform(profile=args.profile), args.profile
         )
         result = asyncio.run(run(url, auth, args.call, arguments))
-    except (BotoCoreError, ClientError, OSError, RuntimeError, ValueError,
-            httpx2.HTTPError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
+    except Exception as exc:  # Report AWS, HTTP, and MCP failures without a traceback.
+        print(f"ERROR: {root_cause(exc)}", file=sys.stderr)
         return 1
 
     if args.json:

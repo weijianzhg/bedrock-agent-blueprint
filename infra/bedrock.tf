@@ -1,6 +1,7 @@
 # Keep model_id as the source selector; the agent always uses the application
 # profile so model usage is attributed to this deployment's tags. MCP servers
-# call no model and get no profile.
+# call no model and get no profile, but the CI role keeps its profile
+# permissions so a deployment can switch back to an agent through CI.
 data "aws_partition" "current" {}
 
 locals {
@@ -24,7 +25,7 @@ locals {
 }
 
 data "aws_bedrock_inference_profile" "source" {
-  count                = local.is_agent && local.source_is_profile ? 1 : 0
+  count                = local.source_is_profile ? 1 : 0
   inference_profile_id = local.model_source_arn
 }
 

@@ -5,6 +5,7 @@ see its docstring and type hints, so keep them clear.
 """
 
 from datetime import datetime, timezone
+import os
 
 from mcp.server.mcpserver import MCPServer
 
@@ -32,6 +33,8 @@ def utc_now() -> str:
 
 
 if __name__ == "__main__":
-    # AgentCore Runtime sends MCP requests to 0.0.0.0:8000/mcp. Stateless HTTP lets
-    # any runtime instance answer any request, which AgentCore expects.
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=8000, stateless_http=True)
+    # AgentCore Runtime sends MCP requests to port 8000 at /mcp; the image sets
+    # MCP_HOST=0.0.0.0. Stateless HTTP lets any runtime instance answer any
+    # request, which AgentCore expects.
+    host = os.environ.get("MCP_HOST", "127.0.0.1")
+    mcp.run(transport="streamable-http", host=host, port=8000, stateless_http=True)

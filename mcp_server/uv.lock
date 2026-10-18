@@ -45,25 +45,33 @@ name = "bedrock-mcp-blueprint"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "boto3" },
-    { name = "httpx2" },
     { name = "mcp" },
 ]
 
 [package.dev-dependencies]
+client = [
+    { name = "boto3" },
+    { name = "httpx2" },
+]
 dev = [
+    { name = "boto3" },
+    { name = "httpx2" },
     { name = "pytest" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "boto3" },
-    { name = "httpx2" },
-    { name = "mcp", specifier = ">=2.3" },
-]
+requires-dist = [{ name = "mcp", specifier = ">=2.3" }]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest" }]
+client = [
+    { name = "boto3" },
+    { name = "httpx2" },
+]
+dev = [
+    { name = "boto3" },
+    { name = "httpx2" },
+    { name = "pytest" },
+]
 
 [[package]]
 name = "boto3"

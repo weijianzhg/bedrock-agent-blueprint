@@ -45,7 +45,7 @@ jobs:
         working-directory: agents
         run: |
           uv sync --dev --frozen
-          uv run pytest ../tests/ --ignore=../tests/mcp_server -v
+          uv run pytest ../tests/ -v
 
       - name: Run MCP server tests
         working-directory: mcp_server
@@ -91,15 +91,9 @@ jobs:
             -target=aws_ecr_repository.agent \
             -target=aws_ecr_lifecycle_policy.agent
 
-      - name: Resolve ECR repository URL and image source
+      - name: Resolve ECR repository URL
         id: ecr
-        run: |
-          echo "repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
-          case "$(terraform -chdir=infra output -raw runtime_type)" in
-            agent) echo "source_dir=agents" >> "$GITHUB_OUTPUT" ;;
-            mcp) echo "source_dir=mcp_server" >> "$GITHUB_OUTPUT" ;;
-            *) echo "Unknown runtime_type" >&2; exit 1 ;;
-          esac
+        run: echo "repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -107,8 +101,8 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v7
         with:
-          context: ${{ steps.ecr.outputs.source_dir }}
-          file: ${{ steps.ecr.outputs.source_dir }}/Dockerfile
+          context: ${{ env.TF_VAR_runtime_type == 'mcp' && 'mcp_server' || 'agents' }}
+          file: ${{ env.TF_VAR_runtime_type == 'mcp' && 'mcp_server' || 'agents' }}/Dockerfile
           platforms: linux/arm64
           provenance: false
           push: true

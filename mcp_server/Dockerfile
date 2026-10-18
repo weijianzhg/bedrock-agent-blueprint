@@ -14,7 +14,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 # Copy server source code
 COPY . .
 
-ENV UV_LINK_MODE=copy \
+ENV MCP_HOST=0.0.0.0 \
+    UV_LINK_MODE=copy \
     PYTHONUNBUFFERED=1
 
 # AgentCore Runtime expects MCP servers on port 8000 at /mcp

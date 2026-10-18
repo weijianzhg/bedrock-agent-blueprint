@@ -88,15 +88,12 @@ run "mcp_server_has_no_model_access" {
     error_message = "MCP servers get no session storage, workspace, or model settings."
   }
   assert {
-    condition     = length(aws_bedrock_inference_profile.agent) == 0 && length(aws_iam_role_policy.bedrock_invoke) == 0 && length(data.aws_bedrock_inference_profile.source) == 0
+    condition     = length(aws_bedrock_inference_profile.agent) == 0 && length(aws_iam_role_policy.bedrock_invoke) == 0
     error_message = "MCP servers must not get an inference profile or Bedrock invoke permissions."
   }
   assert {
-    condition = (
-      !contains([for statement in data.aws_iam_policy_document.ci_deploy[0].statement : statement.sid], "CreateApplicationInferenceProfiles") &&
-      contains([for statement in data.aws_iam_policy_document.ci_deploy[0].statement : statement.sid], "ManageApplicationInferenceProfiles")
-    )
-    error_message = "CI must not create profiles for MCP servers, but can still delete one left by an agent deployment."
+    condition     = contains([for statement in data.aws_iam_policy_document.ci_deploy[0].statement : statement.sid], "CreateApplicationInferenceProfiles")
+    error_message = "CI keeps profile permissions so an MCP deployment can switch back to an agent."
   }
 }
 

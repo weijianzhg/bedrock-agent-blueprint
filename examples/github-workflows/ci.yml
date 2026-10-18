@@ -33,7 +33,7 @@ jobs:
         working-directory: agents
         run: |
           uv sync --dev --frozen
-          uv run pytest ../tests/ --ignore=../tests/mcp_server -v
+          uv run pytest ../tests/ -v
 
       - name: Run MCP server tests
         working-directory: mcp_server

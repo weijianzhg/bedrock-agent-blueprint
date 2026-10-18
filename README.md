@@ -145,7 +145,7 @@ Prompt responses use `text/event-stream`: each `data:` event contains a JSON obj
 Run the tests and Terraform checks without AWS credentials:
 
 ```bash
-uv run --project agents pytest tests/ --ignore=tests/mcp_server -v
+uv run --project agents pytest tests/ -v
 uv run --project mcp_server pytest tests/mcp_server -v
 terraform -chdir=infra fmt -check
 terraform -chdir=infra init -backend=false
@@ -164,7 +164,7 @@ flowchart LR
     Server --> Tools[Your tools]
 ```
 
-The build script and deployment steps are the same: `build_and_push.sh` reads `runtime_type` from Terraform and builds the matching directory. The runtime uses AgentCore's `MCP` server protocol with stateless streamable HTTP. It has no model, inference profile, Bedrock permissions, or session storage, so `model_id` and `inference_profile_tags` are unused. Switching an existing deployment between `agent` and `mcp` replaces the runtime and its session storage.
+The build script and deployment steps are the same: `build_and_push.sh` reads `runtime_type` from Terraform and builds the matching directory. The runtime uses AgentCore's `MCP` server protocol with stateless streamable HTTP. It has no model, inference profile, Bedrock permissions, or session storage, so `model_id` and `inference_profile_tags` are unused. Switching an existing deployment between `agent` and `mcp` updates the runtime and discards its session storage, so download any agent files first.
 
 List and call tools with your AWS credentials:
 
@@ -176,7 +176,7 @@ uv run --project mcp_server python scripts/mcp_client.py \
 
 The client signs MCP requests with SigV4 for IAM-authenticated invocation, and reads the runtime ARN from Terraform unless you pass `--arn`. Most off-the-shelf MCP clients cannot sign requests themselves: connect them through [MCP Proxy for AWS](https://github.com/aws/mcp-proxy-for-aws), or configure a JWT inbound authorizer on the runtime as an extension.
 
-To add a tool, write a typed function with the `@mcp.tool()` decorator in `mcp_server/server.py`. Clients see its docstring and type hints. Tool code runs with the runtime role's permissions; grant the role only the AWS access your tools need. To run the server locally on `http://localhost:8000/mcp` and try it with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
+To add a tool, write a typed function with the `@mcp.tool()` decorator in `mcp_server/server.py`. Clients see its docstring and type hints. Tool code runs with the runtime role's permissions; grant the role only the AWS access your tools need. To run the server locally on `http://localhost:8000/mcp` (it binds to 127.0.0.1 unless `MCP_HOST` is set) and try it with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
 
 ```bash
 uv run --project mcp_server python mcp_server/server.py
@@ -210,7 +210,7 @@ For CI deployments, create an S3 state bucket, copy `infra/backend.tf.example` t
 
 Terraform can create the starter OIDC role: set `github_actions_oidc_enabled = true`, configure `github_repository` and the state bucket/key variables, apply locally, and use the `ci_deploy_role_arn` output. Set `github_oidc_provider_arn` if the account already has a GitHub OIDC provider. Carry your Terraform deployment settings into CI so workflows use the same resource names, model, and OIDC settings. Keep `github_actions_oidc_enabled = true` in CI when using the managed role, or Terraform will plan to delete it.
 
-The deployment example tests the code, builds the image, and applies Terraform. Rollback redeploys an existing ECR image tag; it also updates the runtime version and therefore resets session storage.
+The deployment example tests the code, builds the image, and applies Terraform. Rollback redeploys an existing ECR image tag; it also updates the runtime version and therefore resets session storage. Agent and MCP images share the repository, so roll back only to a tag built for the current `runtime_type`.
 
 ## Remove the deployment
 

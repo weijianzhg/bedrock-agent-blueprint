@@ -3,13 +3,18 @@
 from pathlib import Path
 import sys
 
+import anyio
 import httpx2
 from botocore.credentials import Credentials
+from mcp import Client
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "mcp_server"))
 
 import mcp_client
+import server
 
 ARN = "arn:aws:bedrock-agentcore:eu-west-1:123456789012:runtime/test_mcp-abc123"
 
@@ -44,18 +49,43 @@ def test_requests_are_signed_for_agentcore_including_the_body():
     assert "X-Amz-Date" in signed.headers
 
 
+async def real_result(tool: str, arguments: dict) -> dict:
+    """Shape a real server result the way run() does, without HTTP or AWS."""
+    async with Client(server.mcp) as client:
+        return mcp_client.wire_format(await client.call_tool(tool, arguments))
+
+
+def test_results_use_mcp_wire_names():
+    assert anyio.run(real_result, "text_stats", {"text": "hi"})["isError"] is False
+
+
 def test_cli_prints_tool_text_and_fails_on_tool_errors(monkeypatch, capsys):
     monkeypatch.setattr(mcp_client, "runtime_endpoint", lambda arn, profile: ("url", None))
     calls = []
 
     async def run(url, auth, tool, arguments):
         calls.append((tool, arguments))
-        return {"content": [{"type": "text", "text": "bad input"}], "isError": True}
+        return await real_result(tool, arguments)
 
     monkeypatch.setattr(mcp_client, "run", run)
-    assert mcp_client.main(["--arn", ARN, "--call", "text_stats", "--args", '{"text": "hi"}']) == 1
-    assert calls == [("text_stats", {"text": "hi"})]
-    assert capsys.readouterr().out == "bad input\n"
+    assert mcp_client.main(["--arn", ARN, "--call", "text_stats", "--args", "{}"]) == 1
+    assert calls == [("text_stats", {})]
+    assert "text" in capsys.readouterr().out
+
+
+def test_http_failures_are_reported_without_a_traceback(monkeypatch, capsys):
+    monkeypatch.setattr(mcp_client, "runtime_endpoint", lambda arn, profile: ("url", None))
+
+    async def run(url, auth, tool, arguments):
+        request = httpx2.Request("POST", "https://example.invalid/mcp")
+        response = httpx2.Response(403, request=request)
+        raise ExceptionGroup("unhandled errors in a TaskGroup", [
+            httpx2.HTTPStatusError("403 Forbidden", request=request, response=response)
+        ])
+
+    monkeypatch.setattr(mcp_client, "run", run)
+    assert mcp_client.main(["--arn", ARN, "--list-tools"]) == 1
+    assert capsys.readouterr().err == "ERROR: 403 Forbidden\n"
 
 
 def test_cli_rejects_non_object_arguments(capsys):

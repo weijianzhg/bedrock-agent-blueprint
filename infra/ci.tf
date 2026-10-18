@@ -151,36 +151,26 @@ data "aws_iam_policy_document" "ci_deploy" {
     ]
   }
 
-  # Profile management above stays for MCP deployments, so switching from an
-  # agent can delete its existing profile.
-  dynamic "statement" {
-    for_each = local.is_agent ? [1] : []
-
-    content {
-      # CreateInferenceProfile authorizes both the new profile and its source
-      # foundation models, including every cross-region destination.
-      sid     = "CreateApplicationInferenceProfiles"
-      effect  = "Allow"
-      actions = ["bedrock:CreateInferenceProfile"]
-      resources = concat(
-        [
-          "arn:${data.aws_partition.current.partition}:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*",
-          local.model_source_arn,
-        ],
-        local.source_is_profile ? [for model in data.aws_bedrock_inference_profile.source[0].models : model.model_arn] : [],
-      )
-    }
+  statement {
+    # CreateInferenceProfile authorizes both the new profile and its source
+    # foundation models, including every cross-region destination.
+    sid     = "CreateApplicationInferenceProfiles"
+    effect  = "Allow"
+    actions = ["bedrock:CreateInferenceProfile"]
+    resources = concat(
+      [
+        "arn:${data.aws_partition.current.partition}:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/*",
+        local.model_source_arn,
+      ],
+      local.source_is_profile ? [for model in data.aws_bedrock_inference_profile.source[0].models : model.model_arn] : [],
+    )
   }
 
-  dynamic "statement" {
-    for_each = local.is_agent ? [1] : []
-
-    content {
-      sid       = "ReadInferenceProfileSource"
-      effect    = "Allow"
-      actions   = ["bedrock:GetInferenceProfile", "bedrock:GetFoundationModel"]
-      resources = [local.model_source_arn]
-    }
+  statement {
+    sid       = "ReadInferenceProfileSource"
+    effect    = "Allow"
+    actions   = ["bedrock:GetInferenceProfile", "bedrock:GetFoundationModel"]
+    resources = [local.model_source_arn]
   }
 
   statement {
