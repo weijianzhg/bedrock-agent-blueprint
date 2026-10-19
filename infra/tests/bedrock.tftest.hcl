@@ -71,6 +71,20 @@ run "cross_region_cost_allocation" {
   }
 }
 
+run "mcp_without_ci_has_no_model_lookup" {
+  command = plan
+  variables {
+    runtime_type                = "mcp"
+    github_actions_oidc_enabled = false
+    # The default EU model must not require a lookup in this deployment region.
+    aws_region = "us-east-1"
+  }
+  assert {
+    condition     = length(data.aws_bedrock_inference_profile.source) == 0
+    error_message = "MCP without CI must not look up a Bedrock model profile."
+  }
+}
+
 run "mcp_server_has_no_model_access" {
   command = plan
   variables {
@@ -94,6 +108,15 @@ run "mcp_server_has_no_model_access" {
   assert {
     condition     = contains([for statement in data.aws_iam_policy_document.ci_deploy[0].statement : statement.sid], "CreateApplicationInferenceProfiles")
     error_message = "CI keeps profile permissions so an MCP deployment can switch back to an agent."
+  }
+  assert {
+    condition = alltrue([
+      for model in data.aws_bedrock_inference_profile.source[0].models : contains(
+        one([for statement in data.aws_iam_policy_document.ci_deploy[0].statement : statement.resources if statement.sid == "CreateApplicationInferenceProfiles"]),
+        model.model_arn,
+      )
+    ])
+    error_message = "MCP deployments with CI must retain permissions for every source model so CI can switch back to an agent."
   }
 }
 

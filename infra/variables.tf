@@ -60,7 +60,7 @@ variable "container_tag" {
 }
 
 variable "model_id" {
-  description = "Source foundation model or system cross-region inference profile (ID or ARN) for the managed application inference profile. Used only when runtime_type is agent."
+  description = "Source foundation model or system cross-region inference profile (ID or ARN) for the agent's managed application inference profile and the optional CI role's model-management permissions."
   type        = string
   default     = "eu.anthropic.claude-sonnet-5"
 

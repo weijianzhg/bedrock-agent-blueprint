@@ -164,7 +164,11 @@ flowchart LR
     Server --> Tools[Your tools]
 ```
 
-The build script and deployment steps are the same: `build_and_push.sh` asks Terraform which directory to build. The runtime uses AgentCore's `MCP` server protocol with stateless streamable HTTP. It has no model, inference profile, Bedrock permissions, or session storage, so `model_id` and `inference_profile_tags` are unused. Switching an existing deployment between `agent` and `mcp` updates the runtime and discards its session storage, so download any agent files first.
+The build script and deployment steps are the same: `build_and_push.sh` asks Terraform which directory to build. The runtime uses AgentCore's `MCP` server protocol with stateless streamable HTTP. It has no model, inference profile, Bedrock invoke permissions, or session storage. `inference_profile_tags` is unused. With the optional GitHub Actions OIDC role disabled (the default), MCP deployment does not look up a Bedrock model profile, so no model access or regional model selection is needed.
+
+If `github_actions_oidc_enabled = true`, Terraform still uses `model_id` to grant the CI deploy role permissions to create an agent's inference profile later. Choose a source available in the deployment region; a system inference profile source also requires the deploying identity to have `bedrock:GetInferenceProfile`. These permissions belong to the CI role; the MCP runtime receives no Bedrock invoke permissions.
+
+Switching an existing deployment between `agent` and `mcp` updates the runtime and discards its session storage, so download any agent files first.
 
 List and call tools with your AWS credentials:
 

@@ -25,7 +25,9 @@ locals {
 }
 
 data "aws_bedrock_inference_profile" "source" {
-  count                = local.source_is_profile ? 1 : 0
+  # Only the optional CI role needs the source's backing models to grant
+  # CreateInferenceProfile permissions. Runtime IAM uses the managed profile.
+  count                = var.github_actions_oidc_enabled && local.source_is_profile ? 1 : 0
   inference_profile_id = local.model_source_arn
 }
 

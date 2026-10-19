@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Skipped Bedrock source-profile lookups when the optional CI role is disabled, allowing MCP-only deployments without model-profile access or regional model configuration.
 - Kept long prompt requests connected with streamed heartbeats, including during silent shell commands.
 - Updated the CLI to read streamed answers and detect incomplete responses without retrying agent work.
 

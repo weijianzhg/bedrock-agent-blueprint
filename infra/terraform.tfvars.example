@@ -8,7 +8,8 @@ environment  = "dev"
 
 # Cloud agent workspace settings
 # runtime_type = "mcp" deploys the MCP server in mcp_server/ instead of the agent;
-# model_id and inference_profile_tags are then unused.
+# inference_profile_tags is then unused; model_id is used only if the optional
+# GitHub Actions OIDC role is enabled, to allow CI to switch back to an agent.
 runtime_type  = "agent"
 agent_name    = "bedrock_agent_blueprint"
 container_tag = "latest"
