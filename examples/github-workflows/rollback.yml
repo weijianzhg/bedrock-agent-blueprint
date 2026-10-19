@@ -17,6 +17,7 @@ env:
   TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
   TF_STATE_KEY: ${{ vars.TF_STATE_KEY || 'bedrock-agent-blueprint/dev/terraform.tfstate' }}
   TF_VAR_aws_region: ${{ vars.AWS_REGION || 'eu-west-1' }}
+  TF_VAR_runtime_type: ${{ vars.RUNTIME_TYPE || 'agent' }}
   TF_VAR_github_repository: ${{ github.repository }}
   TF_VAR_github_deploy_branch: main
   TF_VAR_terraform_state_bucket: ${{ vars.TF_STATE_BUCKET }}

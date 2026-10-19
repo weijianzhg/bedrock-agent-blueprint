@@ -16,6 +16,8 @@ flowchart LR
     History --> Workspace
 ```
 
+The same infrastructure can instead deploy an [MCP server](#build-an-mcp-server-instead) that exposes tools to other agents and applications.
+
 ## What you get
 
 - An ARM64 container with Python, Bash, Git, Node.js, npm, and curl.
@@ -144,10 +146,45 @@ Run the tests and Terraform checks without AWS credentials:
 
 ```bash
 uv run --project agents pytest tests/ -v
+uv run --project mcp_server pytest tests/mcp_server -v
 terraform -chdir=infra fmt -check
 terraform -chdir=infra init -backend=false
 terraform -chdir=infra validate
 terraform -chdir=infra test # Terraform 1.7+ for mock-provider tests
+```
+
+## Build an MCP server instead
+
+Set `runtime_type = "mcp"` in `infra/terraform.tfvars` to deploy the [Model Context Protocol](https://modelcontextprotocol.io/) server in [mcp_server/](mcp_server/) rather than the agent. One deployment runs one runtime; use a separate Terraform state, such as another `project_name` or `environment` with its own state key, to run an agent and an MCP server side by side.
+
+```mermaid
+flowchart LR
+    Client[MCP client] -- SigV4 --> Runtime[AgentCore MCP runtime]
+    Runtime --> Server["MCP server (/mcp, port 8000)"]
+    Server --> Tools[Your tools]
+```
+
+The build script and deployment steps are the same: `build_and_push.sh` asks Terraform which directory to build. The runtime uses AgentCore's `MCP` server protocol with stateless streamable HTTP. It has no model, inference profile, Bedrock invoke permissions, or session storage. `inference_profile_tags` is unused. With the optional GitHub Actions OIDC role disabled (the default), MCP deployment does not look up a Bedrock model profile, so no model access or regional model selection is needed.
+
+If `github_actions_oidc_enabled = true`, Terraform still uses `model_id` to grant the CI deploy role permissions to create an agent's inference profile later. Choose a source available in the deployment region; a system inference profile source also requires the deploying identity to have `bedrock:GetInferenceProfile`. These permissions belong to the CI role; the MCP runtime receives no Bedrock invoke permissions.
+
+Switching an existing deployment between `agent` and `mcp` updates the runtime and discards its session storage, so download any agent files first.
+
+List and call tools with your AWS credentials:
+
+```bash
+uv run --project mcp_server python scripts/mcp_client.py --list-tools
+uv run --project mcp_server python scripts/mcp_client.py \
+  --call text_stats --args '{"text": "Hello from AgentCore"}'
+```
+
+The client signs MCP requests with SigV4 for IAM-authenticated invocation, and reads the runtime ARN from Terraform unless you pass `--arn`. Most off-the-shelf MCP clients cannot sign requests themselves: connect them through [MCP Proxy for AWS](https://github.com/aws/mcp-proxy-for-aws), or configure a JWT inbound authorizer on the runtime as an extension.
+
+To add a tool, write a typed function with the `@mcp.tool()` decorator in `mcp_server/server.py`. Clients see its docstring and type hints. Tool code runs with the runtime role's permissions; grant the role only the AWS access your tools need. To run the server locally on `http://localhost:8000/mcp` (it binds to 127.0.0.1 unless `MCP_HOST` is set) and try it with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
+
+```bash
+uv run --project mcp_server python mcp_server/server.py
+npx @modelcontextprotocol/inspector  # Connect with Streamable HTTP to http://localhost:8000/mcp
 ```
 
 ## Make it yours
@@ -158,7 +195,8 @@ terraform -chdir=infra test # Terraform 1.7+ for mock-provider tests
 | [agents/tools.py](agents/tools.py) | Workspace tools and their limits |
 | [agents/Dockerfile](agents/Dockerfile) | Programs available in the remote computer |
 | [scripts/invoke.py](scripts/invoke.py) | CLI or an example for your own application |
-| [infra/agent.tf](infra/agent.tf) | Runtime settings, storage, and environment variables |
+| [mcp_server/server.py](mcp_server/server.py) | MCP tools, when `runtime_type = "mcp"` |
+| [infra/agent.tf](infra/agent.tf) | Runtime settings, protocol, storage, and environment variables |
 | [infra/bedrock.tf](infra/bedrock.tf) | Application inference profile and cost allocation tags |
 | [infra/iam.tf](infra/iam.tf) | The runtime's AWS permissions |
 
@@ -172,11 +210,11 @@ AgentCore captures runtime logs in CloudWatch. Tracing is an optional extension:
 
 [examples/github-workflows/](examples/github-workflows/) contains CI, deployment, and rollback examples. They are inactive until copied into `.github/workflows/` in your own repository.
 
-For CI deployments, create an S3 state bucket, copy `infra/backend.tf.example` to `infra/backend.tf`, and initialize it with the configuration documented in that file. If you already deployed locally, migrate your existing state. Configure repository variables `AWS_REGION`, `TF_STATE_BUCKET`, and `TF_STATE_KEY`, plus the OIDC role secret `AWS_ROLE_TO_ASSUME`.
+For CI deployments, create an S3 state bucket, copy `infra/backend.tf.example` to `infra/backend.tf`, and initialize it with the configuration documented in that file. If you already deployed locally, migrate your existing state. Configure repository variables `AWS_REGION`, `TF_STATE_BUCKET`, and `TF_STATE_KEY`, plus the OIDC role secret `AWS_ROLE_TO_ASSUME`. Set `RUNTIME_TYPE` to `mcp` for an MCP server deployment.
 
 Terraform can create the starter OIDC role: set `github_actions_oidc_enabled = true`, configure `github_repository` and the state bucket/key variables, apply locally, and use the `ci_deploy_role_arn` output. Set `github_oidc_provider_arn` if the account already has a GitHub OIDC provider. Carry your Terraform deployment settings into CI so workflows use the same resource names, model, and OIDC settings. Keep `github_actions_oidc_enabled = true` in CI when using the managed role, or Terraform will plan to delete it.
 
-The deployment example tests the code, builds the image, and applies Terraform. Rollback redeploys an existing ECR image tag; it also updates the runtime version and therefore resets session storage.
+The deployment example tests the code, builds the image, and applies Terraform. Rollback redeploys an existing ECR image tag; it also updates the runtime version and therefore resets session storage. Agent and MCP images share the repository, so roll back only to a tag built for the current `runtime_type`.
 
 ## Remove the deployment
 

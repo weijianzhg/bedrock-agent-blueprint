@@ -29,11 +29,17 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Run tests
+      - name: Run agent tests
         working-directory: agents
         run: |
           uv sync --dev --frozen
           uv run pytest ../tests/ -v
+
+      - name: Run MCP server tests
+        working-directory: mcp_server
+        run: |
+          uv sync --dev --frozen
+          uv run pytest ../tests/mcp_server -v
 
   terraform:
     name: Terraform Checks

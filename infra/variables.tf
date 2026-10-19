@@ -25,6 +25,17 @@ variable "environment" {
 # Cloud agent workspace settings
 # --------------------------------------------------------------------------
 
+variable "runtime_type" {
+  description = "What the runtime serves: \"agent\" (Strands agent in agents/) or \"mcp\" (MCP server in mcp_server/)"
+  type        = string
+  default     = "agent"
+
+  validation {
+    condition     = contains(["agent", "mcp"], var.runtime_type)
+    error_message = "runtime_type must be agent or mcp."
+  }
+}
+
 variable "agent_name" {
   description = "Name for the AgentCore runtime (alphanumeric and underscores only)"
   type        = string
@@ -49,7 +60,7 @@ variable "container_tag" {
 }
 
 variable "model_id" {
-  description = "Source foundation model or system cross-region inference profile (ID or ARN) for the managed application inference profile"
+  description = "Source foundation model or system cross-region inference profile (ID or ARN) for the agent's managed application inference profile and the optional CI role's model-management permissions."
   type        = string
   default     = "eu.anthropic.claude-sonnet-5"
 

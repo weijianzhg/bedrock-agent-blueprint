@@ -15,6 +15,7 @@ env:
   TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
   TF_STATE_KEY: ${{ vars.TF_STATE_KEY || 'bedrock-agent-blueprint/dev/terraform.tfstate' }}
   TF_VAR_aws_region: ${{ vars.AWS_REGION || 'eu-west-1' }}
+  TF_VAR_runtime_type: ${{ vars.RUNTIME_TYPE || 'agent' }}
   TF_VAR_github_repository: ${{ github.repository }}
   TF_VAR_github_deploy_branch: main
   TF_VAR_terraform_state_bucket: ${{ vars.TF_STATE_BUCKET }}
@@ -40,11 +41,17 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Run tests
+      - name: Run agent tests
         working-directory: agents
         run: |
           uv sync --dev --frozen
           uv run pytest ../tests/ -v
+
+      - name: Run MCP server tests
+        working-directory: mcp_server
+        run: |
+          uv sync --dev --frozen
+          uv run pytest ../tests/mcp_server -v
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -84,9 +91,11 @@ jobs:
             -target=aws_ecr_repository.agent \
             -target=aws_ecr_lifecycle_policy.agent
 
-      - name: Resolve ECR repository URL
+      - name: Resolve ECR repository URL and image source
         id: ecr
-        run: echo "repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+          echo "source_dir=$(terraform -chdir=infra output -raw source_dir)" >> "$GITHUB_OUTPUT"
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -94,8 +103,8 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v7
         with:
-          context: agents
-          file: agents/Dockerfile
+          context: ${{ steps.ecr.outputs.source_dir }}
+          file: ${{ steps.ecr.outputs.source_dir }}/Dockerfile
           platforms: linux/arm64
           provenance: false
           push: true

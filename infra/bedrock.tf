@@ -1,5 +1,7 @@
-# Keep model_id as the source selector; the runtime always uses the application
-# profile so model usage is attributed to this deployment's tags.
+# Keep model_id as the source selector; the agent always uses the application
+# profile so model usage is attributed to this deployment's tags. MCP servers
+# call no model and get no profile, but the CI role keeps its profile
+# permissions so a deployment can switch back to an agent through CI.
 data "aws_partition" "current" {}
 
 locals {
@@ -23,11 +25,15 @@ locals {
 }
 
 data "aws_bedrock_inference_profile" "source" {
-  count                = local.source_is_profile ? 1 : 0
+  # Only the optional CI role needs the source's backing models to grant
+  # CreateInferenceProfile permissions. Runtime IAM uses the managed profile.
+  count                = var.github_actions_oidc_enabled && local.source_is_profile ? 1 : 0
   inference_profile_id = local.model_source_arn
 }
 
 resource "aws_bedrock_inference_profile" "agent" {
+  count = local.is_agent ? 1 : 0
+
   name        = local.inference_profile_name
   description = "Bedrock model cost allocation for this agent deployment"
 
